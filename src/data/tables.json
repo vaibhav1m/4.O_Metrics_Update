@@ -1,0 +1,30 @@
+[
+  {
+    "id": "v3_t_product_metrics",
+    "name": "Product Metrics",
+    "icon": "BoxSelect",
+    "color": "#60a5fa",
+    "desc": "Manage mappings for brand_id and platform_id across product metrics."
+  },
+  {
+    "id": "v3_t_platform_adsdashboardpages",
+    "name": "Ads Dashboard Pages",
+    "icon": "LayoutTemplate",
+    "color": "#4ade80",
+    "desc": "Configure SVG arrays and mappings based on platform_id and page."
+  },
+  {
+    "id": "v3_t_master_modules",
+    "name": "Master Modules",
+    "icon": "Database",
+    "color": "#c084fc",
+    "desc": "Administer all globally accessible tool modules and their URLs."
+  },
+  {
+    "id": "v3_t_master_platforms",
+    "name": "Master Platforms",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "Master table for platforms and their details."
+  }
+]
