@@ -98,9 +98,11 @@ export async function POST(
     delete body['platform_name'];
     
     const keys = Object.keys(body);
-    const values = Object.values(body).map(val => 
-        (typeof val === 'object' && val !== null) ? JSON.stringify(val) : val
-    );
+    const values = Object.values(body).map(val => {
+        if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+        if (typeof val === 'string' && val === '') return null;
+        return val;
+    });
     
     if (keys.length === 0) return NextResponse.json({ error: 'No data provided' }, { status: 400 });
 
@@ -139,9 +141,11 @@ export async function PUT(
     delete updateData['platform_name'];
 
     const keys = Object.keys(updateData);
-    const values = Object.values(updateData).map(val => 
-        (typeof val === 'object' && val !== null) ? JSON.stringify(val) : val
-    );
+    const values = Object.values(updateData).map(val => {
+        if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+        if (typeof val === 'string' && val === '') return null;
+        return val;
+    });
 
     if (keys.length === 0) return NextResponse.json({ error: 'No data to update' }, { status: 400 });
 
