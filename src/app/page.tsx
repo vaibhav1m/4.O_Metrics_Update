@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Database, LayoutTemplate, BoxSelect, Settings, Plus, Trash2 } from 'lucide-react';
+import { Database, LayoutTemplate, BoxSelect, Settings, Plus, Trash2, Pencil } from 'lucide-react';
 
 const ICONS: Record<string, any> = {
   Database: Database,
@@ -11,13 +11,15 @@ const ICONS: Record<string, any> = {
   Settings: Settings
 };
 
+const EMPTY_FORM = { id: '', name: '', desc: '', icon: 'Database', color: '#60a5fa', primaryKey: 'id' };
+
 export default function Home() {
   const [tables, setTables] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Modal State
+
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newTable, setNewTable] = useState({ id: '', name: '', desc: '', icon: 'Database', color: '#60a5fa' });
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [formData, setFormData] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -37,22 +39,44 @@ export default function Home() {
     }
   };
 
-  const handleAddTable = async (e: React.FormEvent) => {
+  const openAddModal = () => {
+    setIsEditMode(false);
+    setFormData(EMPTY_FORM);
+    setError('');
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (e: React.MouseEvent, table: any) => {
+    e.preventDefault();
+    setIsEditMode(true);
+    setFormData({
+      id: table.id,
+      name: table.name,
+      desc: table.desc,
+      icon: table.icon || 'Database',
+      color: table.color || '#60a5fa',
+      primaryKey: table.primaryKey || 'id',
+    });
+    setError('');
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
+
     try {
       const res = await fetch('/api/config', {
-        method: 'POST',
+        method: isEditMode ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTable)
+        body: JSON.stringify(formData)
       });
-      
+
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Failed to add table');
-      
+      if (!res.ok) throw new Error(result.error || 'Failed to save');
+
       setIsModalOpen(false);
-      setNewTable({ id: '', name: '', desc: '', icon: 'Database', color: '#60a5fa' });
+      setFormData(EMPTY_FORM);
       fetchTables();
     } catch (err: any) {
       setError(err.message);
@@ -62,7 +86,7 @@ export default function Home() {
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     if (!window.confirm('Are you sure you want to remove this table configuration?')) return;
-    
+
     try {
       const res = await fetch(`/api/config?id=${id}`, { method: 'DELETE' });
       if (res.ok) fetchTables();
@@ -83,7 +107,7 @@ export default function Home() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '2rem' }}>
-        <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+        <button className="btn btn-primary" onClick={openAddModal}>
           <Plus size={18} /> Add New Table Config
         </button>
       </div>
@@ -97,14 +121,24 @@ export default function Home() {
             return (
               <Link href={`/${table.id}`} key={table.id}>
                 <div className="glass-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', cursor: 'pointer', position: 'relative' }}>
-                  <button 
-                    onClick={(e) => handleDelete(e, table.id)}
-                    className="btn-icon" 
-                    style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--danger-color)', opacity: 0.5 }}
-                    title="Delete Table Config"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  <div style={{ position: 'absolute', top: '1rem', right: '1rem', display: 'flex', gap: '0.4rem' }}>
+                    <button
+                      onClick={(e) => openEditModal(e, table)}
+                      className="btn-icon"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent-color)', opacity: 0.6 }}
+                      title="Edit Table Config"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(e, table.id)}
+                      className="btn-icon"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--danger-color)', opacity: 0.5 }}
+                      title="Delete Table Config"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                   <div style={{ marginBottom: '1rem' }}>
                     <IconComponent size={32} style={{ color: table.color }} />
                   </div>
@@ -125,36 +159,48 @@ export default function Home() {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h2>Add New Table Configuration</h2>
+              <h2>{isEditMode ? 'Edit Table Configuration' : 'Add New Table Configuration'}</h2>
               <button className="btn btn-icon btn-outline" onClick={() => setIsModalOpen(false)}>✕</button>
             </div>
-            <form onSubmit={handleAddTable}>
+            <form onSubmit={handleSubmit}>
               <div className="modal-body">
                 {error && <div style={{ color: 'var(--danger-color)', marginBottom: '1rem' }}>{error}</div>}
-                
+
                 <div className="input-group">
                   <label className="input-label">Table Name in Database (e.g. v3_t_new_table)</label>
-                  <input required className="input-field" value={newTable.id} onChange={e => setNewTable({...newTable, id: e.target.value})} />
+                  <input
+                    required
+                    className="input-field"
+                    value={formData.id}
+                    onChange={e => setFormData({ ...formData, id: e.target.value })}
+                    disabled={isEditMode}
+                    style={isEditMode ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                  />
                 </div>
-                
+
                 <div className="input-group">
                   <label className="input-label">Display Name (e.g. New Table)</label>
-                  <input required className="input-field" value={newTable.name} onChange={e => setNewTable({...newTable, name: e.target.value})} />
+                  <input required className="input-field" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                 </div>
-                
+
                 <div className="input-group">
                   <label className="input-label">Description</label>
-                  <input required className="input-field" value={newTable.desc} onChange={e => setNewTable({...newTable, desc: e.target.value})} />
+                  <input required className="input-field" value={formData.desc} onChange={e => setFormData({ ...formData, desc: e.target.value })} />
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label">Primary Key Column</label>
+                  <input required className="input-field" value={formData.primaryKey} onChange={e => setFormData({ ...formData, primaryKey: e.target.value })} placeholder="id" />
                 </div>
 
                 <div className="input-group">
                   <label className="input-label">Icon Color (Hex)</label>
-                  <input type="color" className="input-field" value={newTable.color} onChange={e => setNewTable({...newTable, color: e.target.value})} style={{ height: '50px', padding: '0.5rem' }} />
+                  <input type="color" className="input-field" value={formData.color} onChange={e => setFormData({ ...formData, color: e.target.value })} style={{ height: '50px', padding: '0.5rem' }} />
                 </div>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-outline" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Configuration</button>
+                <button type="submit" className="btn btn-primary">{isEditMode ? 'Update Configuration' : 'Save Configuration'}</button>
               </div>
             </form>
           </div>

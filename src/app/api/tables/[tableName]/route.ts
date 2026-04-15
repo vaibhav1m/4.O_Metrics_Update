@@ -3,24 +3,25 @@ import { query } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 
-const getPrimaryKey = (tableName: string) => {
-  if (tableName === 'v3_t_master_modules') return 'module_id';
-  if (tableName === 'v3_t_master_platforms') return 'platform_id';
-  if (tableName === 'v3_t_platform_adsdashboardpages') return 'id'; // keep id for ads
-  return 'id'; // default fallback for other tables
+const getTableConfigs = () => {
+  const fileContent = fs.readFileSync(path.join(process.cwd(), 'src', 'data', 'tables.json'), 'utf-8');
+  return JSON.parse(fileContent) as { id: string; primaryKey?: string }[];
 };
 
 const getAllowedTables = () => {
   try {
-    const fileContent = fs.readFileSync(path.join(process.cwd(), 'src', 'data', 'tables.json'), 'utf-8');
-    const configs = JSON.parse(fileContent);
-    return configs.map((c: any) => c.id);
+    return getTableConfigs().map(c => c.id);
   } catch (e) {
-    return [
-      'v3_t_product_metrics',
-      'v3_t_platform_adsdashboardpages',
-      'v3_t_master_modules'
-    ];
+    return [];
+  }
+};
+
+const getPrimaryKey = (tableName: string) => {
+  try {
+    const config = getTableConfigs().find(c => c.id === tableName);
+    return config?.primaryKey ?? 'id';
+  } catch (e) {
+    return 'id';
   }
 };
 
@@ -36,42 +37,53 @@ export async function GET(
   }
 
   try {
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const limit = Math.min(500, Math.max(1, parseInt(searchParams.get('limit') || '50')));
+    const offset = (page - 1) * limit;
     const primaryKey = getPrimaryKey(tableName);
 
     // 1. Get exact columns for this table from info schema
     const schemaQuery = await query(`
-      SELECT column_name 
-      FROM information_schema.columns 
+      SELECT column_name
+      FROM information_schema.columns
       WHERE table_name = $1
     `, [tableName]);
-    
+
     if (schemaQuery.rowCount === 0) {
         return NextResponse.json({ error: 'Table does not exist in database' }, { status: 404 });
     }
-    
+
     const tableColumns = schemaQuery.rows.map(r => r.column_name);
     const hasPlatformId = tableColumns.includes('platform_id');
 
-    // 2. Query table data (with platform JOIN if applicable)
-    let sql = `SELECT * FROM public.${tableName} ORDER BY created_time_stamp DESC NULLS LAST, ${primaryKey} DESC LIMIT 100`;
+    // 2. Total count for pagination
+    const countResult = await query(`SELECT COUNT(*) FROM public.${tableName}`, []);
+    const total = parseInt(countResult.rows[0].count);
 
+    // 3. Query table data (with platform JOIN if applicable)
+    let sql: string;
     if (hasPlatformId) {
       sql = `
-        SELECT t.*, p.platform as platform_name 
+        SELECT t.*, p.platform as platform_name
         FROM public.${tableName} t
         LEFT JOIN public.v3_t_master_platforms p ON t.platform_id = p.platform_id
-        ORDER BY t.created_time_stamp DESC NULLS LAST, t.${primaryKey} DESC 
-        LIMIT 100
+        ORDER BY t.created_time_stamp DESC NULLS LAST, t.${primaryKey} DESC
+        LIMIT $1 OFFSET $2
       `;
+    } else {
+      sql = `SELECT * FROM public.${tableName} ORDER BY created_time_stamp DESC NULLS LAST, ${primaryKey} DESC LIMIT $1 OFFSET $2`;
     }
 
-    const dataResult = await query(sql);
-    
-    // We return both the fetched data AND the base columns schema so the frontend can render empty rows properly
-    return NextResponse.json({ 
+    const dataResult = await query(sql, [limit, offset]);
+
+    return NextResponse.json({
         data: dataResult.rows,
         columns: tableColumns,
-        hasPlatformId 
+        hasPlatformId,
+        total,
+        page,
+        limit,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
