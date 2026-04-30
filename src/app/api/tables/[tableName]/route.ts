@@ -56,23 +56,31 @@ export async function GET(
 
     const tableColumns = schemaQuery.rows.map(r => r.column_name);
     const hasPlatformId = tableColumns.includes('platform_id');
+    const hasTimestamp = tableColumns.includes('created_time_stamp');
 
     // 2. Total count for pagination
     const countResult = await query(`SELECT COUNT(*) FROM public.${tableName}`, []);
     const total = parseInt(countResult.rows[0].count);
 
-    // 3. Query table data (with platform JOIN if applicable)
+    // 3. Build ORDER BY based on available columns
+    const orderPrefix = hasPlatformId ? 't.' : '';
+    const orderParts: string[] = [];
+    if (hasTimestamp) orderParts.push(`${orderPrefix}created_time_stamp DESC NULLS LAST`);
+    orderParts.push(`${orderPrefix}${primaryKey} DESC`);
+    const orderBy = orderParts.join(', ');
+
+    // 4. Query table data (with platform JOIN if applicable)
     let sql: string;
     if (hasPlatformId) {
       sql = `
         SELECT t.*, p.platform as platform_name
         FROM public.${tableName} t
         LEFT JOIN public.v3_t_master_platforms p ON t.platform_id = p.platform_id
-        ORDER BY t.created_time_stamp DESC NULLS LAST, t.${primaryKey} DESC
+        ORDER BY ${orderBy}
         LIMIT $1 OFFSET $2
       `;
     } else {
-      sql = `SELECT * FROM public.${tableName} ORDER BY created_time_stamp DESC NULLS LAST, ${primaryKey} DESC LIMIT $1 OFFSET $2`;
+      sql = `SELECT * FROM public.${tableName} ORDER BY ${orderBy} LIMIT $1 OFFSET $2`;
     }
 
     const dataResult = await query(sql, [limit, offset]);

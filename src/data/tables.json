@@ -37,5 +37,27 @@
     "icon": "Database",
     "color": "#60a5fa",
     "desc": "product metrics for platform pages"
+  },
+  {
+    "id": "v3_t_overview_card_config",
+    "name": "New Overview Cards config",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "New Overview Cards configuration array"
+  },
+  {
+    "id": "t_map_platform_materialized_view",
+    "name": "Platform Materalized view",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "Platform Materalized view"
+  },
+  {
+    "id": "v3_t_user_directory",
+    "name": "User directory",
+    "icon": "Database",
+    "color": "#fb6060",
+    "desc": "user directory infytrix",
+    "primaryKey": "user_id"
   }
 ]
