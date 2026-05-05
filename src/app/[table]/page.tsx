@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
-import { ArrowLeft, PlusCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect, use, useMemo } from "react";
+import { ArrowLeft, PlusCircle, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import Link from "next/link";
 import DynamicTable from "@/components/DynamicTable";
 import EditModal from "@/components/EditModal";
@@ -20,6 +20,8 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchCol, setSearchCol] = useState("__all__");
 
   const primaryKey = table === 'v3_t_master_modules' ? 'module_id' : 'id';
 
@@ -31,13 +33,8 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  useEffect(() => {
-    fetchData(1);
-  }, [table]);
-
-  useEffect(() => {
-    fetchData(page);
-  }, [page]);
+  useEffect(() => { fetchData(1); }, [table]);
+  useEffect(() => { fetchData(page); }, [page]);
 
   const fetchData = async (pg: number) => {
     try {
@@ -64,17 +61,11 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleEdit = (row: any) => {
-    setCurrentRow(row);
-    setIsNewRecord(false);
-    setIsModalOpen(true);
-  };
+  const handleEdit = (row: any) => { setCurrentRow(row); setIsNewRecord(false); setIsModalOpen(true); };
 
   const handleCreateNew = () => {
     const defaultData: any = {};
-    columns.forEach(col => {
-      if (col !== 'platform_name') defaultData[col] = "";
-    });
+    columns.forEach(col => { if (col !== 'platform_name') defaultData[col] = ""; });
     setCurrentRow(defaultData);
     setIsNewRecord(true);
     setIsModalOpen(true);
@@ -109,6 +100,23 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
     } catch (err) { console.error("Failed to save", err); }
   };
 
+  const handleSearch = () => setSearchTerm(searchInput);
+  const handleClear = () => { setSearchInput(""); setSearchTerm(""); setSearchCol("__all__"); };
+
+  const filteredData = useMemo(() => {
+    if (!searchTerm.trim()) return data;
+    const s = searchTerm.toLowerCase();
+    return data.filter(row => {
+      const cols = searchCol === "__all__" ? columns : [searchCol];
+      return cols.some(col => {
+        const val = row[col];
+        if (val === null || val === undefined) return false;
+        const str = typeof val === 'object' ? JSON.stringify(val) : String(val);
+        return str.toLowerCase().includes(s);
+      });
+    });
+  }, [data, searchTerm, searchCol, columns]);
+
   const startRow = (page - 1) * PAGE_SIZE + 1;
   const endRow = Math.min(page * PAGE_SIZE, total);
 
@@ -123,51 +131,99 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
   };
 
   return (
-    <div className="container">
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "2rem" }}>
+    <div className="container-wide">
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem" }}>
         <Link href="/" className="btn btn-icon btn-outline"><ArrowLeft size={20} /></Link>
         <div>
-          <h1>{formattedTableName} Table</h1>
-          <p style={{ color: "var(--text-secondary)" }}>Manage data entries dynamically.</p>
+          <h1 style={{ marginBottom: "0.1rem" }}>{formattedTableName} Table</h1>
+          <p style={{ color: "var(--text-secondary)", margin: 0, fontSize: "0.875rem" }}>Manage data entries dynamically.</p>
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
-        <input
-          type="text"
-          placeholder="Search records..."
+      {/* Toolbar: search + add button */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+        {/* Column selector */}
+        <select
+          value={searchCol}
+          onChange={e => setSearchCol(e.target.value)}
           className="input-field"
-          style={{ maxWidth: "300px" }}
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-        />
-      </div>
+          style={{ width: "auto", minWidth: "160px", cursor: "pointer" }}
+        >
+          <option value="__all__">All Columns</option>
+          {columns.map(col => (
+            <option key={col} value={col}>{col.replace(/_/g, " ")}</option>
+          ))}
+        </select>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "1rem" }}>
+        {/* Search input */}
+        <div style={{ position: "relative", flex: 1, minWidth: "200px", maxWidth: "400px" }}>
+          <Search size={15} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", pointerEvents: "none" }} />
+          <input
+            type="text"
+            placeholder="Search records..."
+            className="input-field"
+            style={{ paddingLeft: "32px", paddingRight: searchInput ? "32px" : "12px", width: "100%" }}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSearch()}
+          />
+          {searchInput && (
+            <button onClick={handleClear} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", display: "flex", padding: "2px" }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Search button */}
+        <button onClick={handleSearch} className="btn btn-outline" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <Search size={15} /> Search
+        </button>
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        {/* Add entry */}
         <button onClick={handleCreateNew} className="btn btn-primary" disabled={columns.length === 0}>
           <PlusCircle size={18} /> Add New Entry
         </button>
       </div>
 
-      <div className="glass-card" style={{ padding: "0", background: "transparent", border: "none", boxShadow: "none" }}>
+      {/* Row count info */}
+      {!loading && (
+        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "0.6rem", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+          <span>
+            <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{filteredData.length}</span>
+            {searchTerm ? ` matching rows` : ` rows loaded`}
+            {searchTerm && <span> (filtered from <strong style={{ color: "#e2e8f0" }}>{data.length}</strong> loaded)</span>}
+          </span>
+          <span style={{ color: "rgba(255,255,255,0.15)" }}>|</span>
+          <span>
+            <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{total.toLocaleString()}</span> total records in database
+            {totalPages > 1 && <span> — page {page} of {totalPages} ({startRow}–{endRow} loaded)</span>}
+          </span>
+        </div>
+      )}
+
+      {/* Table */}
+      <div style={{ padding: "0" }}>
         {loading ? (
           <div className="empty-state">Loading data...</div>
         ) : (
-          <DynamicTable data={data.filter(row => {
-            if (!searchTerm) return true;
-            const s = searchTerm.toLowerCase();
-            return columns.some(col => {
-              const val = row[col];
-              if (val === null || val === undefined) return false;
-              const str = typeof val === 'object' ? JSON.stringify(val) : String(val);
-              return str.toLowerCase().includes(s);
-            });
-          })} schemaColumns={columns} primaryKey={primaryKey} onEdit={handleEdit} onDelete={handleDelete} />
+          <DynamicTable
+            data={filteredData}
+            schemaColumns={columns}
+            primaryKey={primaryKey}
+            tableName={table}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
         )}
       </div>
 
+      {/* Pagination */}
       {!loading && totalPages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
           <span>Showing {startRow}–{endRow} of {total} records</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
             <button className="btn btn-outline btn-icon" onClick={() => setPage(p => p - 1)} disabled={page === 1} style={{ padding: '0.4rem 0.6rem' }}>
