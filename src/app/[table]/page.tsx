@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, use, useMemo } from "react";
-import { ArrowLeft, PlusCircle, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { useState, useEffect, use, useMemo, useRef } from "react";
+import { ArrowLeft, PlusCircle, ChevronLeft, ChevronRight, Search, X, FilterX } from "lucide-react";
 import Link from "next/link";
-import DynamicTable from "@/components/DynamicTable";
+import DynamicTable, { type DynamicTableHandle } from "@/components/DynamicTable";
 import EditModal from "@/components/EditModal";
 
 const PAGE_SIZE = 200;
@@ -22,6 +22,8 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
   const [searchTerm, setSearchTerm] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [searchCol, setSearchCol] = useState("__all__");
+  const tableRef = useRef<DynamicTableHandle>(null);
+  const [hasActiveFilters, setHasActiveFilters] = useState(false);
 
   const primaryKey = table === 'v3_t_master_modules' ? 'module_id' : 'id';
 
@@ -180,6 +182,23 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
           <Search size={15} /> Search
         </button>
 
+        {/* Clear column filters */}
+        <button
+          onClick={() => tableRef.current?.clearFilters()}
+          className="btn btn-outline"
+          title="Clear all column filters"
+          disabled={!hasActiveFilters}
+          style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            borderColor: hasActiveFilters ? "rgba(239,68,68,0.4)" : "var(--surface-border)",
+            color: hasActiveFilters ? "#f87171" : "var(--text-secondary)",
+            opacity: hasActiveFilters ? 1 : 0.45,
+            cursor: hasActiveFilters ? "pointer" : "not-allowed",
+          }}
+        >
+          <FilterX size={15} /> Clear Filters
+        </button>
+
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
@@ -211,12 +230,14 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
           <div className="empty-state">Loading data...</div>
         ) : (
           <DynamicTable
+            ref={tableRef}
             data={filteredData}
             schemaColumns={columns}
             primaryKey={primaryKey}
             tableName={table}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onFilterChanged={setHasActiveFilters}
           />
         )}
       </div>

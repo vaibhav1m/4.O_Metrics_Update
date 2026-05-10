@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, forwardRef, useImperativeHandle } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef, IFilterComp, IFilterParams } from "ag-grid-community";
 import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
@@ -14,6 +14,7 @@ interface DynamicTableProps {
   tableName: string;
   onEdit: (row: any) => void;
   onDelete: (id: string) => void;
+  onFilterChanged?: (hasActiveFilters: boolean) => void;
 }
 
 // ── Custom filter (vanilla AG Grid, works alongside React renderers) ─────────
@@ -186,15 +187,24 @@ function DeleteSvg() {
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-export default function DynamicTable({
+export interface DynamicTableHandle {
+  clearFilters: () => void;
+}
+
+const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function DynamicTable({
   data,
   schemaColumns,
   primaryKey,
   tableName,
   onEdit,
   onDelete,
-}: DynamicTableProps) {
+  onFilterChanged,
+}, ref) {
   const gridRef = useRef<AgGridReact>(null);
+
+  useImperativeHandle(ref, () => ({
+    clearFilters: () => gridRef.current?.api?.setFilterModel(null),
+  }));
 
   if (!schemaColumns || schemaColumns.length === 0) {
     return <div className="empty-state"><p>Could not load table schema.</p></div>;
@@ -269,7 +279,13 @@ export default function DynamicTable({
         suppressColumnVirtualisation={false}
         enableCellTextSelection={true}
         tooltipShowDelay={300}
+        onFilterChanged={() => {
+          const model = gridRef.current?.api?.getFilterModel();
+          onFilterChanged?.(!!model && Object.keys(model).length > 0);
+        }}
       />
     </div>
   );
-}
+});
+
+export default DynamicTable;

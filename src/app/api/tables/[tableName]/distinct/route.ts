@@ -31,12 +31,21 @@ export async function GET(
   }
 
   try {
-    const result = await query(
-      `SELECT DISTINCT "${column}" FROM public.${tableName} WHERE "${column}" IS NOT NULL ORDER BY "${column}" LIMIT 500`,
-      []
-    );
+    let sql: string;
+    let resultColumn: string;
+
+    if (column === 'platform_name') {
+      // platform_name is a virtual JOIN column — query the source table directly
+      sql = `SELECT DISTINCT platform FROM public.v3_t_master_platforms WHERE platform IS NOT NULL ORDER BY platform LIMIT 500`;
+      resultColumn = 'platform';
+    } else {
+      sql = `SELECT DISTINCT "${column}" FROM public.${tableName} WHERE "${column}" IS NOT NULL ORDER BY "${column}" LIMIT 500`;
+      resultColumn = column;
+    }
+
+    const result = await query(sql, []);
     const values = result.rows.map(r => {
-      const v = r[column];
+      const v = r[resultColumn];
       return typeof v === 'object' ? JSON.stringify(v) : String(v);
     });
     return NextResponse.json({ values });
