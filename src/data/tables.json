@@ -46,18 +46,48 @@
     "desc": "New Overview Cards configuration array"
   },
   {
-    "id": "t_map_platform_materialized_view",
-    "name": "Platform Materalized view",
-    "icon": "Database",
-    "color": "#60a5fa",
-    "desc": "Platform Materalized view"
-  },
-  {
     "id": "v3_t_user_directory",
     "name": "User directory",
     "icon": "Database",
     "color": "#fb6060",
     "desc": "user directory infytrix",
     "primaryKey": "user_id"
+  },
+  {
+    "id": "t_map_platform_materialized_view",
+    "name": "Platform Materialized view",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "Platform Materialized view",
+    "primaryKey": "platform_id"
+  },
+  {
+    "id": "v3_t_export_jobs",
+    "name": "Go Export Jobs",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "Go Export Jobs"
+  },
+  {
+    "id": "v3_t_master_users",
+    "name": "Master users",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "master users for admin"
+  },
+  {
+    "id": "v3_t_user_saved_views",
+    "name": "User Saved Views",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "User Saved Views for new sales overview page"
+  },
+  {
+    "id": "t_master_brand_cat",
+    "name": "Master brand category",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "Master brand category",
+    "primaryKey": "category_id"
   }
 ]

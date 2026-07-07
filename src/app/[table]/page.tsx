@@ -48,7 +48,11 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
       if (result.hasPlatformId && !newColumns.includes('platform_name')) {
         newColumns = [...newColumns, 'platform_name'];
       }
-      setColumns(newColumns);
+      setColumns(prev =>
+        prev.length === newColumns.length && prev.every((c, i) => c === newColumns[i])
+          ? prev
+          : newColumns
+      );
       setData(result.data || []);
       setTotal(result.total ?? 0);
     } catch (err) {

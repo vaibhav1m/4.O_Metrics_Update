@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, forwardRef, useImperativeHandle } from "react";
+import { useRef, forwardRef, useImperativeHandle, useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef, IFilterComp, IFilterParams } from "ag-grid-community";
 import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
@@ -47,6 +47,8 @@ class ColumnFilterComp implements IFilterComp {
   }
 
   private render() {
+    const wasSearchFocused = document.activeElement === this.eGui.querySelector<HTMLInputElement>("#filter-search");
+
     const filtered = this.allValues.filter(v =>
       v.toLowerCase().includes(this.searchText.toLowerCase())
     );
@@ -89,6 +91,10 @@ class ColumnFilterComp implements IFilterComp {
         this.searchText = (e.target as HTMLInputElement).value;
         this.render();
       });
+      if (wasSearchFocused) {
+        searchInput.focus();
+        searchInput.setSelectionRange(this.searchText.length, this.searchText.length);
+      }
     }
 
     this.eGui.querySelector("#select-all")?.addEventListener("click", () => {
@@ -201,6 +207,10 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
   onFilterChanged,
 }, ref) {
   const gridRef = useRef<AgGridReact>(null);
+  const onEditRef = useRef(onEdit);
+  onEditRef.current = onEdit;
+  const onDeleteRef = useRef(onDelete);
+  onDeleteRef.current = onDelete;
 
   useImperativeHandle(ref, () => ({
     clearFilters: () => gridRef.current?.api?.setFilterModel(null),
@@ -210,7 +220,7 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
     return <div className="empty-state"><p>Could not load table schema.</p></div>;
   }
 
-  const columnDefs: ColDef[] = [
+  const columnDefs = useMemo<ColDef[]>(() => [
     ...schemaColumns.map(col => ({
       field: col,
       headerName: col.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
@@ -237,7 +247,7 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
           <button
             className="btn btn-icon btn-outline"
             title="Edit"
-            onClick={() => onEdit(params.data)}
+            onClick={() => onEditRef.current(params.data)}
           >
             <EditSvg />
           </button>
@@ -245,14 +255,14 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
             className="btn btn-icon btn-outline"
             title="Delete"
             style={{ borderColor: "rgba(239,68,68,0.3)" }}
-            onClick={() => onDelete(params.data[primaryKey])}
+            onClick={() => onDeleteRef.current(params.data[primaryKey])}
           >
             <DeleteSvg />
           </button>
         </div>
       ),
     },
-  ];
+  ], [schemaColumns, tableName, primaryKey]);
 
   const defaultColDef: ColDef = {
     resizable: true,
