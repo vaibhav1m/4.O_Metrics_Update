@@ -8,28 +8,12 @@
     "primaryKey": "id"
   },
   {
-    "id": "v3_t_master_modules",
-    "name": "Master Modules",
-    "icon": "Database",
-    "color": "#c084fc",
-    "desc": "Administer all globally accessible tool modules and their URLs.",
-    "primaryKey": "module_id"
-  },
-  {
     "id": "v3_t_master_platforms",
     "name": "Master Platforms",
     "icon": "Database",
     "color": "#60a5fa",
     "desc": "Master table for platforms and their details.",
     "primaryKey": "platform_id"
-  },
-  {
-    "id": "v3_t_master_modules_v2",
-    "name": "Master modules v2",
-    "icon": "Database",
-    "color": "#60a5fa",
-    "desc": "master_modules_v2",
-    "primaryKey": "module_id"
   },
   {
     "id": "v3_t_product_metrics",
@@ -89,5 +73,43 @@
     "color": "#60a5fa",
     "desc": "Master brand category",
     "primaryKey": "category_id"
+  },
+  {
+    "id": "v3_t_master_modules_v2",
+    "name": "Master Modules V2",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "Master Modules V2",
+    "primaryKey": "module_id"
+  },
+  {
+    "id": "v3_t_brands_alert_scheduling_detail",
+    "name": "Whatsapp alert schedule",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "Whatsapp alert schedule brands_alert_scheduling_detail"
+  },
+  {
+    "id": "v3_t_master_apps",
+    "name": "Master Apps",
+    "icon": "Database",
+    "color": "#60a5fa",
+    "desc": "v3_t_master_apps",
+    "primaryKey": "app_id"
+  },
+  {
+    "id": "v3_t_platform_jump_map",
+    "name": "Platform Jump Map",
+    "icon": "Database",
+    "color": "#f1fb60",
+    "desc": "platform-page-jump-mapping",
+    "primaryKey": "id"
+  },
+  {
+    "id": "v3_t_page_default_view",
+    "name": "Page default view",
+    "icon": "Database",
+    "color": "#e1fb60",
+    "desc": "Page default view"
   }
 ]

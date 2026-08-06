@@ -89,6 +89,7 @@ export async function GET(
         data: dataResult.rows,
         columns: tableColumns,
         hasPlatformId,
+        primaryKey,
         total,
         page,
         limit,

@@ -25,7 +25,7 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
   const tableRef = useRef<DynamicTableHandle>(null);
   const [hasActiveFilters, setHasActiveFilters] = useState(false);
 
-  const primaryKey = table === 'v3_t_master_modules' ? 'module_id' : 'id';
+  const [primaryKey, setPrimaryKey] = useState('id');
 
   const formattedTableName = table
     .replace('v3_t_', '')
@@ -55,6 +55,7 @@ export default function TablePage({ params }: { params: Promise<{ table: string 
       );
       setData(result.data || []);
       setTotal(result.total ?? 0);
+      setPrimaryKey(result.primaryKey || 'id');
     } catch (err) {
       console.error("Failed to fetch", err);
     } finally {
