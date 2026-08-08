@@ -1,6 +1,9 @@
 import { Pool } from 'pg';
 
-const pool = new Pool({
+// This pool is the "control plane" — it holds Database Explorer's own
+// admin_* tables (connections, data sources, users, audit log) and also
+// doubles as the system connection's data pool (see src/lib/connections.ts).
+export const pool = new Pool({
   host: process.env.SQL_HOST,
   user: process.env.SQL_USER,
   password: process.env.SQL_PASSWORD,

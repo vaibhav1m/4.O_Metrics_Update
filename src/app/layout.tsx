@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Database } from "lucide-react";
 import Link from "next/link";
+import BrandIcon from "@/components/BrandIcon";
 
 export const metadata: Metadata = {
-  title: "4.OMetrics Admin",
-  description: "Dynamic Database Table Administration",
+  title: "Database Explorer",
+  description: "Browse and manage tables across multiple database connections",
 };
 
 export default function RootLayout({
@@ -19,13 +19,11 @@ export default function RootLayout({
         <nav className="nav-bar">
           <Link href="/">
             <div className="nav-brand">
-              <Database className="text-accent" style={{ color: "var(--accent-color)" }} />
-              <span>4.OMetrics Admin</span>
+              <BrandIcon />
+              <span>Database Explorer</span>
             </div>
           </Link>
-          <div style={{ display: "flex", gap: "1rem" }}>
-            <span style={{ fontSize: "0.875rem", color: "var(--text-secondary)" }}>v1.0</span>
-          </div>
+          <span style={{ fontSize: "0.875rem", color: "var(--text-secondary)" }}>v2.0</span>
         </nav>
         <main>
           {children}

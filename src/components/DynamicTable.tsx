@@ -7,26 +7,29 @@ import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
+export type ColumnFilterModel = Record<string, { values: string[] }>;
+
 interface DynamicTableProps {
   data: any[];
   schemaColumns: string[];
   primaryKey: string;
   tableName: string;
+  connectionId: string;
   onEdit: (row: any) => void;
   onDelete: (id: string) => void;
-  onFilterChanged?: (hasActiveFilters: boolean) => void;
+  onFilterChanged?: (model: ColumnFilterModel | null) => void;
 }
 
 // ── Custom filter (vanilla AG Grid, works alongside React renderers) ─────────
 class ColumnFilterComp implements IFilterComp {
   private eGui!: HTMLDivElement;
-  private params!: IFilterParams & { tableName: string; colName: string };
+  private params!: IFilterParams & { connectionId: string; tableName: string; colName: string };
   private selectedValues: Set<string> = new Set();
   private allValues: string[] = [];
   private searchText = "";
   private isLoaded = false;
 
-  init(params: IFilterParams & { tableName: string; colName: string }) {
+  init(params: IFilterParams & { connectionId: string; tableName: string; colName: string }) {
     this.params = params;
     this.eGui = document.createElement("div");
     this.render();
@@ -37,7 +40,7 @@ class ColumnFilterComp implements IFilterComp {
     if (this.isLoaded) return;
     try {
       const res = await fetch(
-        `/api/tables/${this.params.tableName}/distinct?column=${this.params.colName}`
+        `/api/connections/${this.params.connectionId}/tables/${this.params.tableName}/distinct?column=${this.params.colName}`
       );
       const json = await res.json();
       this.allValues = json.values || [];
@@ -202,6 +205,7 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
   schemaColumns,
   primaryKey,
   tableName,
+  connectionId,
   onEdit,
   onDelete,
   onFilterChanged,
@@ -211,9 +215,17 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
   onEditRef.current = onEdit;
   const onDeleteRef = useRef(onDelete);
   onDeleteRef.current = onDelete;
+  const onFilterChangedRef = useRef(onFilterChanged);
+  onFilterChangedRef.current = onFilterChanged;
 
   useImperativeHandle(ref, () => ({
-    clearFilters: () => gridRef.current?.api?.setFilterModel(null),
+    clearFilters: () => {
+      gridRef.current?.api?.setFilterModel(null);
+      // AG Grid doesn't reliably fire onFilterChanged for setFilterModel()
+      // with this custom filter component, so notify the parent directly
+      // rather than depending on that event.
+      onFilterChangedRef.current?.(null);
+    },
   }));
 
   if (!schemaColumns || schemaColumns.length === 0) {
@@ -227,7 +239,7 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
       resizable: true,
       sortable: true,
       filter: ColumnFilterComp,
-      filterParams: { tableName, colName: col },
+      filterParams: { connectionId, tableName, colName: col },
       minWidth: 120,
       flex: 1,
       cellRenderer: (params: any) => <DataCell value={params.value} />,
@@ -262,7 +274,7 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
         </div>
       ),
     },
-  ], [schemaColumns, tableName, primaryKey]);
+  ], [schemaColumns, tableName, connectionId, primaryKey]);
 
   const defaultColDef: ColDef = {
     resizable: true,
@@ -290,8 +302,8 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
         enableCellTextSelection={true}
         tooltipShowDelay={300}
         onFilterChanged={() => {
-          const model = gridRef.current?.api?.getFilterModel();
-          onFilterChanged?.(!!model && Object.keys(model).length > 0);
+          const model = gridRef.current?.api?.getFilterModel() as ColumnFilterModel | undefined;
+          onFilterChanged?.(model && Object.keys(model).length > 0 ? model : null);
         }}
       />
     </div>

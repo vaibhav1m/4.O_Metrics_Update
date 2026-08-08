@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { XIcon as X } from "lucide-animated";
 
 interface EditModalProps {
   isOpen: boolean;
@@ -15,6 +15,13 @@ interface EditModalProps {
 export default function EditModal({ isOpen, onClose, onSave, rowData, primaryKey, isNew = false }: EditModalProps) {
   const [formData, setFormData] = useState<any>({});
   const [errors, setErrors] = useState<any>({});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (isOpen && rowData) {
