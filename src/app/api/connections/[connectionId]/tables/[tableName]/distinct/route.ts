@@ -29,7 +29,8 @@ export async function GET(
       sql = `SELECT DISTINCT platform FROM public.v3_t_master_platforms WHERE platform IS NOT NULL ORDER BY platform LIMIT 500`;
       resultColumn = "platform";
     } else {
-      sql = `SELECT DISTINCT "${column}" FROM public."${tableName}" WHERE "${column}" IS NOT NULL ORDER BY "${column}" LIMIT 500`;
+      const schemaName = dataSource.schema_name || "public";
+      sql = `SELECT DISTINCT "${column}" FROM "${schemaName}"."${tableName}" WHERE "${column}" IS NOT NULL ORDER BY "${column}" LIMIT 500`;
       resultColumn = column;
     }
 

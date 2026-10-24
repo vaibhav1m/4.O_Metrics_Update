@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query as controlQuery } from "@/lib/db";
-import { isValidIdentifier, isReservedTableId } from "@/lib/dataSource";
+import { isValidIdentifier } from "@/lib/dataSource";
 
 type Params = { params: Promise<{ connectionId: string }> };
 
@@ -24,19 +24,21 @@ export async function POST(request: Request, { params }: Params) {
     if (!isValidIdentifier(body.table_id)) {
       return NextResponse.json({ error: "Table name must contain only letters, numbers, and underscores" }, { status: 400 });
     }
-    if (isReservedTableId(body.table_id)) {
-      return NextResponse.json({ error: "This table is managed internally by Database Explorer and can't be added as a data source" }, { status: 400 });
-    }
     if (body.primary_key && !isValidIdentifier(body.primary_key)) {
       return NextResponse.json({ error: "Primary key must contain only letters, numbers, and underscores" }, { status: 400 });
     }
+    const schemaName = body.schema_name || "public";
+    if (!isValidIdentifier(schemaName)) {
+      return NextResponse.json({ error: "Schema name must contain only letters, numbers, and underscores" }, { status: 400 });
+    }
 
     const result = await controlQuery(
-      `INSERT INTO v3_t_dbexplorer_data_sources (connection_id, connection_name, table_id, display_name, description, icon, color, primary_key)
-       VALUES ($1, (SELECT name FROM v3_t_dbexplorer_connections WHERE id = $1), $2, $3, $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO v3_t_dbexplorer_data_sources (connection_id, connection_name, table_id, schema_name, display_name, description, icon, color, primary_key)
+       VALUES ($1, (SELECT name FROM v3_t_dbexplorer_connections WHERE id = $1), $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [
         connectionId,
         body.table_id,
+        schemaName,
         body.display_name,
         body.description || "",
         body.icon || "Database",

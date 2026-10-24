@@ -35,7 +35,7 @@ export async function POST(
       return NextResponse.json({ error: plan.error }, { status: plan.status });
     }
 
-    const { sharedColumns, columnList, newRows, sourceTotal, existingCount } = plan;
+    const { sharedColumns, columnList, targetSchema, newRows, sourceTotal, existingCount } = plan;
 
     let imported = 0;
     for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
@@ -52,7 +52,7 @@ export async function POST(
 
       await queryConnection(
         connectionId,
-        `INSERT INTO public."${tableName}" (${columnList}) VALUES ${rowPlaceholders.join(", ")}`,
+        `INSERT INTO "${targetSchema}"."${tableName}" (${columnList}) VALUES ${rowPlaceholders.join(", ")}`,
         values
       );
       imported += batch.length;

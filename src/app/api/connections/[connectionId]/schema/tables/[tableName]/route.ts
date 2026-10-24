@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { queryConnection } from "@/lib/connections";
-import { isValidIdentifier, isReservedTableId } from "@/lib/dataSource";
+import { isValidIdentifier } from "@/lib/dataSource";
 
 // Columns + the real primary key (if Postgres has one on record) for a table
 // that isn't registered as a data source yet — used to pre-fill (and require
@@ -10,8 +10,10 @@ export async function GET(
   { params }: { params: Promise<{ connectionId: string; tableName: string }> }
 ) {
   const { connectionId, tableName } = await params;
+  const { searchParams } = new URL(request.url);
+  const schemaName = searchParams.get("schema") || "public";
 
-  if (!isValidIdentifier(tableName) || isReservedTableId(tableName)) {
+  if (!isValidIdentifier(tableName) || !isValidIdentifier(schemaName)) {
     return NextResponse.json({ error: "Invalid table name" }, { status: 400 });
   }
 
@@ -19,18 +21,18 @@ export async function GET(
     const [columnsResult, pkResult] = await Promise.all([
       queryConnection(connectionId, `
         SELECT column_name FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = $1
+        WHERE table_schema = $1 AND table_name = $2
         ORDER BY ordinal_position
-      `, [tableName]),
+      `, [schemaName, tableName]),
       queryConnection(connectionId, `
         SELECT kcu.column_name
         FROM information_schema.table_constraints tc
         JOIN information_schema.key_column_usage kcu
           ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
-        WHERE tc.table_schema = 'public' AND tc.table_name = $1 AND tc.constraint_type = 'PRIMARY KEY'
+        WHERE tc.table_schema = $1 AND tc.table_name = $2 AND tc.constraint_type = 'PRIMARY KEY'
         ORDER BY kcu.ordinal_position
         LIMIT 1
-      `, [tableName]),
+      `, [schemaName, tableName]),
     ]);
 
     if (columnsResult.rowCount === 0) {

@@ -14,6 +14,7 @@ import {
   XIcon as X,
   DatabaseBackupIcon as FetchIcon,
   type DatabaseBackupIconHandle as FetchIconHandle,
+  TerminalIcon as Terminal,
   SearchIcon as Search,
   PlusIcon as Plus,
 } from "lucide-animated";
@@ -25,7 +26,7 @@ const ICONS: Record<string, any> = {
   Settings: Settings,
 };
 
-const EMPTY_FORM = { table_id: "", display_name: "", description: "", icon: "Database", color: "#60a5fa", primary_key: "id" };
+const EMPTY_FORM = { table_id: "", schema_name: "public", display_name: "", description: "", icon: "Database", color: "#60a5fa", primary_key: "id" };
 
 function prettifyTableName(tableId: string): string {
   return tableId
@@ -35,10 +36,21 @@ function prettifyTableName(tableId: string): string {
     .join(" ");
 }
 
+interface FetchTableCandidate {
+  schema: string;
+  table: string;
+}
+
 interface FetchTableEntry {
+  schema: string;
+  table: string;
   columns: string[];
   primaryKey: string;
   loadingColumns: boolean;
+}
+
+function fetchKey(schema: string, table: string): string {
+  return `${schema}.${table}`;
 }
 
 export default function ConnectionPage({ params }: { params: Promise<{ connectionId: string }> }) {
@@ -79,7 +91,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
 
   // Fetch-tables-from-database modal state
   const [isFetchOpen, setIsFetchOpen] = useState(false);
-  const [fetchTables, setFetchTables] = useState<string[]>([]);
+  const [fetchTables, setFetchTables] = useState<FetchTableCandidate[]>([]);
   const [fetchLoadingTables, setFetchLoadingTables] = useState(false);
   const [fetchSearch, setFetchSearch] = useState("");
   const [fetchSelected, setFetchSelected] = useState<Map<string, FetchTableEntry>>(new Map());
@@ -89,7 +101,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
   const filteredFetchTables = useMemo(() => {
     if (!fetchSearch.trim()) return fetchTables;
     const q = fetchSearch.toLowerCase();
-    return fetchTables.filter(t => t.toLowerCase().includes(q));
+    return fetchTables.filter(t => t.table.toLowerCase().includes(q) || t.schema.toLowerCase().includes(q));
   }, [fetchTables, fetchSearch]);
 
   useEffect(() => {
@@ -138,6 +150,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
     setEditingId(ds.id);
     setFormData({
       table_id: ds.table_id,
+      schema_name: ds.schema_name || "public",
       display_name: ds.display_name,
       description: ds.description || "",
       icon: ds.icon || "Database",
@@ -255,25 +268,27 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
     }
   };
 
-  const toggleFetchTable = async (tableName: string) => {
-    if (fetchSelected.has(tableName)) {
+  const toggleFetchTable = async (schema: string, table: string) => {
+    const key = fetchKey(schema, table);
+    if (fetchSelected.has(key)) {
       setFetchSelected(prev => {
         const next = new Map(prev);
-        next.delete(tableName);
+        next.delete(key);
         return next;
       });
       return;
     }
 
-    setFetchSelected(prev => new Map(prev).set(tableName, { columns: [], primaryKey: "", loadingColumns: true }));
+    setFetchSelected(prev => new Map(prev).set(key, { schema, table, columns: [], primaryKey: "", loadingColumns: true }));
     try {
-      const res = await fetch(`/api/connections/${connectionId}/schema/tables/${tableName}`);
+      const res = await fetch(`/api/connections/${connectionId}/schema/tables/${table}?schema=${encodeURIComponent(schema)}`);
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Failed to load columns");
       setFetchSelected(prev => {
-        if (!prev.has(tableName)) return prev; // unchecked while loading
+        if (!prev.has(key)) return prev; // unchecked while loading
         const next = new Map(prev);
-        next.set(tableName, {
+        next.set(key, {
+          schema, table,
           columns: result.columns,
           primaryKey: result.detectedPrimaryKey || result.columns[0] || "",
           loadingColumns: false,
@@ -281,27 +296,27 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
         return next;
       });
     } catch (err: any) {
-      alert(`Failed to load "${tableName}": ${err.message}`);
+      alert(`Failed to load "${table}": ${err.message}`);
       setFetchSelected(prev => {
         const next = new Map(prev);
-        next.delete(tableName);
+        next.delete(key);
         return next;
       });
     }
   };
 
-  const setFetchPrimaryKey = (tableName: string, primaryKey: string) => {
+  const setFetchPrimaryKey = (key: string, primaryKey: string) => {
     setFetchSelected(prev => {
-      const entry = prev.get(tableName);
+      const entry = prev.get(key);
       if (!entry) return prev;
       const next = new Map(prev);
-      next.set(tableName, { ...entry, primaryKey });
+      next.set(key, { ...entry, primaryKey });
       return next;
     });
   };
 
   const handleFetchSubmit = async () => {
-    const entries = Array.from(fetchSelected.entries());
+    const entries = Array.from(fetchSelected.values());
     if (entries.length === 0) return;
 
     setFetchSubmitting(true);
@@ -309,22 +324,24 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
     const added: string[] = [];
     const failed: { table: string; error: string }[] = [];
 
-    for (const [tableName, entry] of entries) {
+    for (const entry of entries) {
+      const label = entry.schema === "public" ? entry.table : `${entry.schema}.${entry.table}`;
       try {
         const res = await fetch(`/api/connections/${connectionId}/tables`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            table_id: tableName,
-            display_name: prettifyTableName(tableName),
+            table_id: entry.table,
+            schema_name: entry.schema,
+            display_name: prettifyTableName(entry.table),
             primary_key: entry.primaryKey,
           }),
         });
         const result = await res.json();
         if (!res.ok) throw new Error(result.error || "Failed to add");
-        added.push(tableName);
+        added.push(label);
       } catch (err: any) {
-        failed.push({ table: tableName, error: err.message });
+        failed.push({ table: label, error: err.message });
       }
     }
 
@@ -373,6 +390,10 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
         </div>
 
         <div style={{ flex: 1 }} />
+
+        <Link href={`/${connectionId}/console`} className="btn btn-outline">
+          <Terminal size={16} /> Query Console
+        </Link>
 
         <button
           className="btn btn-outline"
@@ -448,16 +469,30 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
               <div className="modal-body">
                 {error && <div style={{ color: "var(--danger-color)", marginBottom: "1rem" }}>{error}</div>}
 
-                <div className="input-group">
-                  <label className="input-label">Table Name in Database (e.g. v3_t_new_table)</label>
-                  <input
-                    required
-                    className="input-field"
-                    value={formData.table_id}
-                    onChange={e => setFormData({ ...formData, table_id: e.target.value })}
-                    disabled={isEditMode}
-                    style={isEditMode ? { opacity: 0.5, cursor: "not-allowed" } : {}}
-                  />
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <div className="input-group" style={{ flex: 2 }}>
+                    <label className="input-label">Table Name in Database (e.g. v3_t_new_table)</label>
+                    <input
+                      required
+                      className="input-field"
+                      value={formData.table_id}
+                      onChange={e => setFormData({ ...formData, table_id: e.target.value })}
+                      disabled={isEditMode}
+                      style={isEditMode ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+                    />
+                  </div>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label className="input-label">Schema</label>
+                    <input
+                      required
+                      className="input-field"
+                      value={formData.schema_name}
+                      onChange={e => setFormData({ ...formData, schema_name: e.target.value })}
+                      disabled={isEditMode}
+                      placeholder="public"
+                      style={isEditMode ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+                    />
+                  </div>
                 </div>
 
                 <div className="input-group">
@@ -531,6 +566,12 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                         />
                         <span style={{ flex: 1 }}>{t.display_name}</span>
                         <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontFamily: "monospace" }}>{t.table_id}</span>
+                        {t.schema_name && t.schema_name !== "public" && (
+                          <span style={{
+                            fontSize: "0.68rem", fontWeight: 600, padding: "0.1rem 0.4rem", borderRadius: "999px",
+                            background: "rgba(192,132,252,0.15)", color: "#c084fc",
+                          }}>{t.schema_name}</span>
+                        )}
                         {already && <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>Already added</span>}
                       </label>
                     );
@@ -607,12 +648,19 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
               ) : (
                 <div style={{ maxHeight: "360px", overflowY: "auto", border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "0.5rem" }}>
                   {filteredFetchTables.map(t => {
-                    const entry = fetchSelected.get(t);
+                    const key = fetchKey(t.schema, t.table);
+                    const entry = fetchSelected.get(key);
                     return (
-                      <div key={t} style={{ borderBottom: "1px solid var(--surface-border)", padding: "0.5rem 0.25rem" }}>
+                      <div key={key} style={{ borderBottom: "1px solid var(--surface-border)", padding: "0.5rem 0.25rem" }}>
                         <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", cursor: "pointer" }}>
-                          <input type="checkbox" checked={!!entry} onChange={() => toggleFetchTable(t)} />
-                          <span style={{ flex: 1, fontFamily: "monospace", fontSize: "0.85rem" }}>{t}</span>
+                          <input type="checkbox" checked={!!entry} onChange={() => toggleFetchTable(t.schema, t.table)} />
+                          <span style={{ flex: 1, fontFamily: "monospace", fontSize: "0.85rem" }}>{t.table}</span>
+                          {t.schema !== "public" && (
+                            <span style={{
+                              fontSize: "0.68rem", fontWeight: 600, padding: "0.1rem 0.4rem", borderRadius: "999px",
+                              background: "rgba(192,132,252,0.15)", color: "#c084fc",
+                            }}>{t.schema}</span>
+                          )}
                         </label>
 
                         {entry && (
@@ -628,7 +676,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                                   className="input-field"
                                   style={{ width: "auto", padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
                                   value={entry.primaryKey}
-                                  onChange={e => setFetchPrimaryKey(t, e.target.value)}
+                                  onChange={e => setFetchPrimaryKey(key, e.target.value)}
                                 >
                                   {entry.columns.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>

@@ -53,6 +53,7 @@ export async function GET(request: Request, { params }: Params) {
   if (!dataSource) {
     return NextResponse.json({ error: "Invalid or unconfigured table name" }, { status: 400 });
   }
+  const schemaName = dataSource.schema_name || "public";
 
   try {
     const { searchParams } = new URL(request.url);
@@ -64,8 +65,8 @@ export async function GET(request: Request, { params }: Params) {
     const schemaQuery = await queryConnection(connectionId, `
       SELECT column_name
       FROM information_schema.columns
-      WHERE table_name = $1
-    `, [tableName]);
+      WHERE table_schema = $1 AND table_name = $2
+    `, [schemaName, tableName]);
 
     if (schemaQuery.rowCount === 0) {
       return NextResponse.json({ error: "Table does not exist in database" }, { status: 404 });
@@ -75,10 +76,12 @@ export async function GET(request: Request, { params }: Params) {
     const hasPlatformId = tableColumns.includes("platform_id");
 
     // Only join the platform lookup table if it actually exists on this connection.
+    // v3_t_master_platforms is always looked up in "public", independent of
+    // which schema the table being viewed itself lives in.
     let joinPlatform = false;
     if (hasPlatformId) {
       const platformTableCheck = await queryConnection(connectionId, `
-        SELECT 1 FROM information_schema.tables WHERE table_name = 'v3_t_master_platforms' LIMIT 1
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'v3_t_master_platforms' LIMIT 1
       `);
       joinPlatform = (platformTableCheck.rowCount ?? 0) > 0;
     }
@@ -88,8 +91,8 @@ export async function GET(request: Request, { params }: Params) {
     // The base table is always aliased "t" so filter/order-by column references
     // stay consistent whether or not the platform join is present.
     const fromClause = joinPlatform
-      ? `public."${tableName}" t LEFT JOIN public.v3_t_master_platforms p ON t.platform_id = p.platform_id`
-      : `public."${tableName}" t`;
+      ? `"${schemaName}"."${tableName}" t LEFT JOIN public.v3_t_master_platforms p ON t.platform_id = p.platform_id`
+      : `"${schemaName}"."${tableName}" t`;
 
     // Column filters (from the grid's per-column checkbox filters). Silently
     // drop anything that isn't a real column on this table — "platform_name"
@@ -136,6 +139,7 @@ export async function GET(request: Request, { params }: Params) {
       columns: tableColumns,
       hasPlatformId: joinPlatform,
       primaryKey,
+      schemaName,
       total,
       page,
       limit,
@@ -152,6 +156,7 @@ export async function POST(request: Request, { params }: Params) {
   if (!dataSource) {
     return NextResponse.json({ error: "Invalid or unconfigured table name" }, { status: 400 });
   }
+  const schemaName = dataSource.schema_name || "public";
 
   try {
     const body = await request.json();
@@ -171,7 +176,7 @@ export async function POST(request: Request, { params }: Params) {
     const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
     const columns = keys.map(k => `"${k}"`).join(", ");
 
-    const sql = `INSERT INTO public."${tableName}" (${columns}) VALUES (${placeholders}) RETURNING *`;
+    const sql = `INSERT INTO "${schemaName}"."${tableName}" (${columns}) VALUES (${placeholders}) RETURNING *`;
     const result = await queryConnection(connectionId, sql, values);
     const created = result.rows[0];
 
@@ -190,6 +195,7 @@ export async function PUT(request: Request, { params }: Params) {
   if (!dataSource) {
     return NextResponse.json({ error: "Invalid or unconfigured table name" }, { status: 400 });
   }
+  const schemaName = dataSource.schema_name || "public";
 
   try {
     const body = await request.json();
@@ -198,7 +204,7 @@ export async function PUT(request: Request, { params }: Params) {
 
     if (!idValue) return NextResponse.json({ error: `${primaryKey} is required for updating` }, { status: 400 });
 
-    const beforeResult = await queryConnection(connectionId, `SELECT * FROM public."${tableName}" WHERE "${primaryKey}" = $1`, [idValue]);
+    const beforeResult = await queryConnection(connectionId, `SELECT * FROM "${schemaName}"."${tableName}" WHERE "${primaryKey}" = $1`, [idValue]);
     const before = beforeResult.rows[0] || null;
 
     const updateData = { ...body };
@@ -217,7 +223,7 @@ export async function PUT(request: Request, { params }: Params) {
     const setClause = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
     values.push(idValue);
 
-    const sql = `UPDATE public."${tableName}" SET ${setClause} WHERE "${primaryKey}" = $${values.length} RETURNING *`;
+    const sql = `UPDATE "${schemaName}"."${tableName}" SET ${setClause} WHERE "${primaryKey}" = $${values.length} RETURNING *`;
     const result = await queryConnection(connectionId, sql, values);
 
     if (result.rowCount === 0) return NextResponse.json({ error: "Record not found" }, { status: 404 });
@@ -238,6 +244,7 @@ export async function DELETE(request: Request, { params }: Params) {
   if (!dataSource) {
     return NextResponse.json({ error: "Invalid or unconfigured table name" }, { status: 400 });
   }
+  const schemaName = dataSource.schema_name || "public";
 
   try {
     const { searchParams } = new URL(request.url);
@@ -246,7 +253,7 @@ export async function DELETE(request: Request, { params }: Params) {
 
     if (!idValue) return NextResponse.json({ error: "Query parameter 'id' is required" }, { status: 400 });
 
-    const sql = `DELETE FROM public."${tableName}" WHERE "${primaryKey}" = $1 RETURNING *`;
+    const sql = `DELETE FROM "${schemaName}"."${tableName}" WHERE "${primaryKey}" = $1 RETURNING *`;
     const result = await queryConnection(connectionId, sql, [idValue]);
 
     if (result.rowCount === 0) return NextResponse.json({ error: "Record not found" }, { status: 404 });

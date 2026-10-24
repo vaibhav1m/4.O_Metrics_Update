@@ -10,6 +10,7 @@ export interface ImportPlan {
   sharedColumns: string[];
   columnList: string; // quoted, comma-joined shared columns, ready to drop into SQL
   targetPk: string;
+  targetSchema: string; // schema the target table lives in, for the caller's own INSERT
   sourceTotal: number; // rows matching the filter, before excluding ones that already exist
   newRows: any[]; // rows matching the filter whose PK isn't already present in the target
   existingCount: number;
@@ -48,9 +49,14 @@ export async function buildImportPlan(opts: {
   const sourceSource = await getDataSource(sourceConnectionId, sourceTableId);
   if (!sourceSource) return { error: "Source table is not configured on the source connection", status: 400 };
 
+  const targetSchema = targetSource.schema_name || "public";
+  const sourceSchema = sourceSource.schema_name || "public";
+  const targetRef = `"${targetSchema}"."${tableName}"`;
+  const sourceRef = `"${sourceSchema}"."${sourceTableId}"`;
+
   const [targetCols, sourceCols] = await Promise.all([
-    queryConnection(connectionId, "SELECT column_name FROM information_schema.columns WHERE table_name = $1", [tableName]),
-    queryConnection(sourceConnectionId, "SELECT column_name FROM information_schema.columns WHERE table_name = $1", [sourceTableId]),
+    queryConnection(connectionId, "SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2", [targetSchema, tableName]),
+    queryConnection(sourceConnectionId, "SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2", [sourceSchema, sourceTableId]),
   ]);
 
   const sourceColSet = new Set(sourceCols.rows.map((r: any) => r.column_name));
@@ -78,7 +84,7 @@ export async function buildImportPlan(opts: {
       }).join(" AND ")
     : "";
 
-  const countResult = await queryConnection(sourceConnectionId, `SELECT COUNT(*) FROM public."${sourceTableId}" ${whereClause}`, whereValues);
+  const countResult = await queryConnection(sourceConnectionId, `SELECT COUNT(*) FROM ${sourceRef} ${whereClause}`, whereValues);
   const sourceTotal = parseInt(countResult.rows[0].count, 10);
   if (sourceTotal > MAX_SOURCE_ROWS) {
     return { error: `Selection has ${sourceTotal} rows, which is over the ${MAX_SOURCE_ROWS} row import limit — narrow it with a filter`, status: 400 };
@@ -87,22 +93,22 @@ export async function buildImportPlan(opts: {
   const columnList = sharedColumns.map((c: string) => `"${c}"`).join(", ");
 
   if (sourceTotal === 0) {
-    return { sharedColumns, columnList, targetPk, sourceTotal: 0, newRows: [], existingCount: 0 };
+    return { sharedColumns, columnList, targetPk, targetSchema, sourceTotal: 0, newRows: [], existingCount: 0 };
   }
 
-  const sourceRowsResult = await queryConnection(sourceConnectionId, `SELECT ${columnList} FROM public."${sourceTableId}" ${whereClause}`, whereValues);
+  const sourceRowsResult = await queryConnection(sourceConnectionId, `SELECT ${columnList} FROM ${sourceRef} ${whereClause}`, whereValues);
   const sourceRows = sourceRowsResult.rows;
 
   const pkValues = sourceRows.map((r: any) => r[targetPk]);
   const existingResult = await queryConnection(
     connectionId,
-    `SELECT "${targetPk}" FROM public."${tableName}" WHERE "${targetPk}"::text = ANY($1::text[])`,
+    `SELECT "${targetPk}" FROM ${targetRef} WHERE "${targetPk}"::text = ANY($1::text[])`,
     [pkValues.map((v: any) => String(v))]
   );
   const existingPks = new Set(existingResult.rows.map((r: any) => String(r[targetPk])));
   const newRows = sourceRows.filter((r: any) => !existingPks.has(String(r[targetPk])));
 
-  return { sharedColumns, columnList, targetPk, sourceTotal: sourceRows.length, newRows, existingCount: sourceRows.length - newRows.length };
+  return { sharedColumns, columnList, targetPk, targetSchema, sourceTotal: sourceRows.length, newRows, existingCount: sourceRows.length - newRows.length };
 }
 
 export function isImportPlanError(plan: ImportPlan | ImportPlanError): plan is ImportPlanError {

@@ -8,21 +8,12 @@ export function isValidIdentifier(value: string): boolean {
   return IDENTIFIER.test(value);
 }
 
-// Database Explorer's own control-plane tables should never be added as a
-// browsable/editable data source — they're managed through the Connections UI,
-// which handles encryption and referential integrity the generic table editor
-// doesn't know about.
-const RESERVED_TABLE_PREFIX = "v3_t_dbexplorer_";
-
-export function isReservedTableId(tableId: string): boolean {
-  return tableId.startsWith(RESERVED_TABLE_PREFIX);
-}
-
 export interface DataSourceRow {
   id: string;
   connection_id: string;
   connection_name: string;
   table_id: string;
+  schema_name: string;
   display_name: string;
   description: string;
   icon: string;
@@ -38,6 +29,6 @@ export async function getDataSource(connectionId: string, tableId: string): Prom
   );
   const row = result.rows[0];
   if (!row) return null;
-  if (!isValidIdentifier(row.table_id) || !isValidIdentifier(row.primary_key)) return null;
+  if (!isValidIdentifier(row.table_id) || !isValidIdentifier(row.primary_key) || !isValidIdentifier(row.schema_name)) return null;
   return row;
 }

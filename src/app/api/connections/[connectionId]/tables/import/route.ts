@@ -28,7 +28,7 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     const sourceRows = await controlQuery(
-      `SELECT table_id, display_name, description, icon, color, primary_key
+      `SELECT table_id, schema_name, display_name, description, icon, color, primary_key
        FROM v3_t_dbexplorer_data_sources
        WHERE connection_id = $1 AND table_id = ANY($2::text[])`,
       [sourceConnectionId, tableIds]
@@ -39,10 +39,11 @@ export async function POST(request: Request, { params }: Params) {
     const skippedMissing: string[] = [];
 
     for (const row of sourceRows.rows) {
+      const schemaName = row.schema_name || "public";
       const existsCheck = await queryConnection(
         connectionId,
-        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1",
-        [row.table_id]
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2",
+        [schemaName, row.table_id]
       );
       if ((existsCheck.rowCount ?? 0) === 0) {
         skippedMissing.push(row.table_id);
@@ -50,10 +51,10 @@ export async function POST(request: Request, { params }: Params) {
       }
 
       const result = await controlQuery(
-        `INSERT INTO v3_t_dbexplorer_data_sources (connection_id, connection_name, table_id, display_name, description, icon, color, primary_key)
-         VALUES ($1, (SELECT name FROM v3_t_dbexplorer_connections WHERE id = $1), $2, $3, $4, $5, $6, $7)
+        `INSERT INTO v3_t_dbexplorer_data_sources (connection_id, connection_name, table_id, schema_name, display_name, description, icon, color, primary_key)
+         VALUES ($1, (SELECT name FROM v3_t_dbexplorer_connections WHERE id = $1), $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (connection_id, table_id) DO NOTHING`,
-        [connectionId, row.table_id, row.display_name, row.description, row.icon, row.color, row.primary_key]
+        [connectionId, row.table_id, schemaName, row.display_name, row.description, row.icon, row.color, row.primary_key]
       );
 
       if (result.rowCount && result.rowCount > 0) imported.push(row.table_id);

@@ -55,6 +55,7 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
   const [filtersRefreshing, setFiltersRefreshing] = useState(false);
 
   const [primaryKey, setPrimaryKey] = useState('id');
+  const [schemaName, setSchemaName] = useState('public');
   const [connection, setConnection] = useState<any>(null);
   const [allConnections, setAllConnections] = useState<any[]>([]);
 
@@ -152,6 +153,7 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
       setData(result.data || []);
       setTotal(result.total ?? 0);
       setPrimaryKey(result.primaryKey || 'id');
+      setSchemaName(result.schemaName || 'public');
     } catch (err) {
       console.error("Failed to fetch", err);
     } finally {
@@ -396,7 +398,15 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
             <span>/</span>
             <span style={{ color: "var(--text-primary)" }}>{table}</span>
           </div>
-          <h1 style={{ marginBottom: "0.1rem" }}>{formattedTableName} Table</h1>
+          <h1 style={{ marginBottom: "0.1rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            {formattedTableName} Table
+            {schemaName !== "public" && (
+              <span style={{
+                fontSize: "0.7rem", fontWeight: 600, padding: "0.15rem 0.55rem", borderRadius: "999px",
+                background: "rgba(192,132,252,0.15)", color: "#c084fc", verticalAlign: "middle",
+              }}>{schemaName}</span>
+            )}
+          </h1>
           {connection && (
             <p style={{ color: "var(--text-secondary)", margin: 0, fontSize: "0.8rem", fontFamily: "monospace" }}>
               {connection.host}:{connection.port} / {connection.database_name}

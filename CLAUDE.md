@@ -41,14 +41,19 @@ Defined in `migrations/*.sql` (applied in filename order by `db:migrate`). All p
 | Table | Holds |
 |---|---|
 | `v3_t_dbexplorer_connections` | One row per database connection; passwords AES-256-GCM encrypted |
-| `v3_t_dbexplorer_data_sources` | Which tables are exposed, scoped per connection (replaced `tables.json`). Carries a denormalized `connection_name` column, kept in sync in application code — set on insert (`INSERT ... (SELECT name FROM v3_t_dbexplorer_connections WHERE id = $1)`) and cascaded on rename (`PUT /api/connections/[connectionId]`) |
+| `v3_t_dbexplorer_data_sources` | Which tables are exposed, scoped per connection (replaced `tables.json`). Carries a denormalized `connection_name` column, kept in sync in application code — set on insert (`INSERT ... (SELECT name FROM v3_t_dbexplorer_connections WHERE id = $1)`) and cascaded on rename (`PUT /api/connections/[connectionId]`). Also carries `schema_name` (defaults `'public'`) — see Schema support below |
 | `v3_t_dbexplorer_users` | Login accounts; bcrypt password hashes. Unused — scaffolded for when login is rebuilt |
 | `v3_t_dbexplorer_audit_logs` | Every insert/update/delete with before/after JSON. `changed_by` is null until login exists |
+| `v3_t_dbexplorer_query_logs` | Statement-level history of the Query Console (SQL text, read/write kind, status, row count, duration, error). Kept separate from the audit log, which is row-level and whose `action` CHECK only permits insert/update/delete |
 
-These tables live in the same Postgres schema as the business `v3_t_*` tables they help manage. To keep
-the generic table editor from ever treating its own control tables as an editable data source,
-`isReservedTableId()` in `src/lib/dataSource.ts` rejects any `table_id` starting with `v3_t_dbexplorer_`
-— both when adding a config and when importing one from another connection.
+These tables live in the same Postgres schema as the business `v3_t_*` tables they help manage. There is no
+special-casing to hide them from the generic table editor — "Fetch Tables from Database" lists them like
+any other table, and they can be registered as a normal data source. This is a deliberate choice, not an
+oversight: registering `v3_t_dbexplorer_connections` and editing `password_encrypted` through the generic
+editor means typing a plain value into what `decrypt()` expects as `iv.authTag.ciphertext` — it'll desync
+the stored credential, and since row edits are audit-logged, whatever was typed lands in
+`v3_t_dbexplorer_audit_logs.before_data`/`after_data` in the clear. Editing connections through the
+dedicated Connections UI avoids this entirely; the generic editor has no reason to know that.
 
 ### Routing
 
@@ -57,11 +62,58 @@ Everything is scoped by connection id (a UUID, taken as-is from the route param 
 - `/` — connection list
 - `/[connectionId]` — table configs for that connection
 - `/[connectionId]/[table]` — the data grid
+- `/[connectionId]/console` — the Query Console
 - `/api/connections/[connectionId]/tables/[tableName]` — row CRUD
 - `/api/connections/[connectionId]/tables/[tableName]/distinct` — column filter values
 - `/api/connections/[connectionId]/tables/import` — copy data-source *configs* from another connection
 - `/api/connections/[connectionId]/tables/[tableName]/import` — copy row *data* from a table on another
   connection
+- `/api/connections/[connectionId]/schema/tables` — real tables in the DB not yet registered
+- `/api/connections/[connectionId]/query` — run console SQL
+- `/api/connections/[connectionId]/query/logs` — console history (GET) / clear it (DELETE)
+
+### Schema support
+
+Data sources aren't limited to the `public` schema. `v3_t_dbexplorer_data_sources.schema_name` records
+which schema a table lives in (default `'public'`, so existing configs are unaffected); every query that
+touches the underlying table — row CRUD, distinct values, both import paths — reads it off `getDataSource()`
+and interpolates `"schema"."table"` instead of a hardcoded `public."table"`. `v3_t_master_platforms` (the
+platform-name JOIN) is the one fixed exception: it's always looked up in `public`, independent of whatever
+schema the table being viewed lives in.
+
+`GET /api/connections/[connectionId]/schema/tables` (the "Fetch Tables from Database" discovery list) scans
+every schema except Postgres's own internal ones, and includes `BASE TABLE`, `VIEW`, and `FOREIGN` types —
+not just base tables in `public`. The single-table variant
+(`/schema/tables/[tableName]?schema=`) takes the schema as a query param, defaulting to `public` for
+backward compatibility.
+
+**Known limitation**: a `table_id` is still unique per connection *regardless of schema* — matching how
+routing (`/[connectionId]/[table]`) and `getDataSource()` key purely by table name, with no schema in the
+URL. If the same table name exists in two schemas on one connection, only one can be registered; the
+"Fetch Tables" list and the manual "Add Table Config" form don't stop you from picking either, but whichever
+is added second will hit the data source's unique constraint. This wasn't worth solving generally — it's a
+rare collision, and fixing it properly would mean threading schema through the URL/routing layer too.
+
+### Query Console
+
+`/[connectionId]/console` runs arbitrary SQL against a connection. Unlike everything else in the app,
+this deliberately bypasses the data-source whitelist — it is the one place that can reach any table.
+
+`classifyStatement()` in `src/lib/sqlSafety.ts` labels each submission `read` or `write`; writes are
+rejected with HTTP 409 `requiresConfirmation` unless the request carries `confirmed: true`. **The gate is
+enforced in the API route, not just the UI**, so skipping the dialog doesn't skip the check.
+
+The classifier resolves all ambiguity toward `write` — a misclassified SELECT costs one extra click,
+whereas the reverse would let a DELETE through silently. It strips comments, string literals, and quoted
+identifiers first (so `SELECT 'drop table x'` stays a read, and a keyword can't hide inside a comment),
+then scans the *whole* sanitized text for write keywords — which is what catches multi-statement
+submissions (`SELECT 1; DROP TABLE x`) and CTE-wrapped writes (`WITH x AS (DELETE ...) SELECT ...`).
+Anything whose leading keyword isn't a known read verb is treated as a write.
+
+Every executed statement is logged to `v3_t_dbexplorer_query_logs`, including failures. Statements
+blocked by the confirmation gate are *not* logged — nothing ran. Queries run with a 30s
+`statement_timeout`, and at most 500 rows are returned to the browser (`rowCount` still reports the true
+total).
 
 ### Cross-connection import
 
