@@ -45,6 +45,7 @@ Defined in `migrations/*.sql` (applied in filename order by `db:migrate`). All p
 | `v3_t_dbexplorer_users` | Login accounts; bcrypt password hashes. Unused — scaffolded for when login is rebuilt |
 | `v3_t_dbexplorer_audit_logs` | Every insert/update/delete with before/after JSON. `changed_by` is null until login exists |
 | `v3_t_dbexplorer_query_logs` | Statement-level history of the Query Console (SQL text, read/write kind, status, row count, duration, error). Kept separate from the audit log, which is row-level and whose `action` CHECK only permits insert/update/delete |
+| `v3_t_dbexplorer_folders` / `v3_t_dbexplorer_folder_tables` | Per-user folders on a connection, and a many-to-many link to data sources (a table can be in any number of folders). See Folders below |
 
 These tables live in the same Postgres schema as the business `v3_t_*` tables they help manage. There is no
 special-casing to hide them from the generic table editor — "Fetch Tables from Database" lists them like
@@ -71,6 +72,7 @@ Everything is scoped by connection id (a UUID, taken as-is from the route param 
 - `/api/connections/[connectionId]/schema/tables` — real tables in the DB not yet registered
 - `/api/connections/[connectionId]/query` — run console SQL
 - `/api/connections/[connectionId]/query/logs` — console history (GET) / clear it (DELETE)
+- `/api/connections/[connectionId]/folders` — the current user's folders (GET) / create (POST); `/folders/[folderId]` rename (PUT) / delete (DELETE); `/folders/[folderId]/tables` add tables (POST `{dataSourceIds}`) / remove one (DELETE `?dataSourceId=`)
 
 ### Schema support
 
@@ -114,6 +116,19 @@ Every executed statement is logged to `v3_t_dbexplorer_query_logs`, including fa
 blocked by the confirmation gate are *not* logged — nothing ran. Queries run with a 30s
 `statement_timeout`, and at most 500 rows are returned to the browser (`rowCount` still reports the true
 total).
+
+### Folders
+
+`/[connectionId]` has a sidebar of the current user's folders for grouping that connection's tables. Folders
+are per user *and* per connection; a data source can sit in any number of folders, and deleting a folder
+never touches the data-source configs in it. The API's `INSERT ... SELECT` only links data sources that
+belong to the folder's own connection.
+
+"The current user" is not a login. It's a free-text name set via the nav-bar badge (`UserBadge.tsx`),
+kept in localStorage, and sent as the `x-dbexplorer-user` header (`src/lib/useCurrentUser.ts` client side,
+`src/lib/currentUser.ts` server side, lowercased). Anyone can send any name, so it scopes data but isn't a
+security boundary. When auth is rebuilt, replace `getRequestUser()` with the session and repoint
+`owner_username` at `v3_t_dbexplorer_users`.
 
 ### Cross-connection import
 

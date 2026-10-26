@@ -4,7 +4,8 @@ import { useState, useEffect, use, useMemo, useRef } from "react";
 import Link from "next/link";
 // LayoutTemplate, BoxSelect, Trash2, Pencil have no lucide-animated equivalent;
 // Loader2 stays static since it needs a continuous CSS spin, not a hover animation.
-import { LayoutTemplate, BoxSelect, Trash2, Pencil, Loader2 } from "lucide-react";
+import { LayoutTemplate, BoxSelect, Trash2, Pencil, Loader2, Folder, FolderOpen, FolderPlus, FolderMinus, Layers, Check } from "lucide-react";
+import { useCurrentUser, userFetch } from "@/lib/useCurrentUser";
 import {
   DatabaseIcon as Database,
   SettingsIcon as Settings,
@@ -53,6 +54,26 @@ function fetchKey(schema: string, table: string): string {
   return `${schema}.${table}`;
 }
 
+interface FolderRow {
+  id: string;
+  name: string;
+  data_source_ids: string[];
+}
+
+// Remembered per connection so coming back from a table keeps you in the same folder.
+const activeFolderKey = (connectionId: string) => `dbexplorer:active-folder:${connectionId}`;
+
+function readActiveFolder(connectionId: string): string | null {
+  try { return localStorage.getItem(activeFolderKey(connectionId)); } catch { return null; }
+}
+
+function writeActiveFolder(connectionId: string, folderId: string | null) {
+  try {
+    if (folderId) localStorage.setItem(activeFolderKey(connectionId), folderId);
+    else localStorage.removeItem(activeFolderKey(connectionId));
+  } catch { /* storage blocked — selection just won't persist */ }
+}
+
 export default function ConnectionPage({ params }: { params: Promise<{ connectionId: string }> }) {
   const { connectionId } = use(params);
 
@@ -81,13 +102,55 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
 
   const existingTableIds = useMemo(() => new Set(dataSources.map(ds => ds.table_id)), [dataSources]);
 
-  // Configured-tables search
+  // Folders (per user, per connection)
+  const user = useCurrentUser();
+  const [folders, setFolders] = useState<FolderRow[]>([]);
+  const [activeFolderId, setActiveFolderIdState] = useState<string | null>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [folderError, setFolderError] = useState("");
+  // "Add to folders" picker, opened from a table card
+  const [folderPickerFor, setFolderPickerFor] = useState<any | null>(null);
+  // "Add tables" picker, opened from inside a folder
+  const [isAddToFolderOpen, setIsAddToFolderOpen] = useState(false);
+  const [addToFolderSelected, setAddToFolderSelected] = useState<Set<string>>(new Set());
+  const [addToFolderSearch, setAddToFolderSearch] = useState("");
+  const [addToFolderSubmitting, setAddToFolderSubmitting] = useState(false);
+
+  const activeFolder = folders.find(f => f.id === activeFolderId) || null;
+
+  const foldersByDataSource = useMemo(() => {
+    const map = new Map<string, FolderRow[]>();
+    for (const f of folders) {
+      for (const dsId of f.data_source_ids) {
+        if (!map.has(dsId)) map.set(dsId, []);
+        map.get(dsId)!.push(f);
+      }
+    }
+    return map;
+  }, [folders]);
+
+  // Configured-tables search, within the active folder (or all tables)
   const [searchQuery, setSearchQuery] = useState("");
   const filteredDataSources = useMemo(() => {
-    if (!searchQuery.trim()) return dataSources;
+    const inScope = activeFolder
+      ? dataSources.filter(ds => activeFolder.data_source_ids.includes(ds.id))
+      : dataSources;
+    if (!searchQuery.trim()) return inScope;
     const q = searchQuery.toLowerCase();
-    return dataSources.filter(ds => ds.display_name.toLowerCase().includes(q) || ds.table_id.toLowerCase().includes(q));
-  }, [dataSources, searchQuery]);
+    return inScope.filter(ds => ds.display_name.toLowerCase().includes(q) || ds.table_id.toLowerCase().includes(q));
+  }, [dataSources, searchQuery, activeFolder]);
+
+  const addToFolderCandidates = useMemo(() => {
+    if (!activeFolder) return [];
+    const q = addToFolderSearch.trim().toLowerCase();
+    return dataSources.filter(ds =>
+      !activeFolder.data_source_ids.includes(ds.id) &&
+      (!q || ds.display_name.toLowerCase().includes(q) || ds.table_id.toLowerCase().includes(q))
+    );
+  }, [dataSources, activeFolder, addToFolderSearch]);
 
   // Fetch-tables-from-database modal state
   const [isFetchOpen, setIsFetchOpen] = useState(false);
@@ -106,16 +169,118 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
 
   useEffect(() => {
     fetchAll();
+    setActiveFolderIdState(readActiveFolder(connectionId));
   }, [connectionId]);
 
   useEffect(() => {
-    if (!isModalOpen && !isImportOpen && !isFetchOpen) return;
+    fetchFolders();
+  }, [connectionId, user]);
+
+  useEffect(() => {
+    if (!isModalOpen && !isImportOpen && !isFetchOpen && !folderPickerFor && !isAddToFolderOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setIsModalOpen(false); setIsImportOpen(false); setIsFetchOpen(false); }
+      if (e.key === "Escape") {
+        setIsModalOpen(false); setIsImportOpen(false); setIsFetchOpen(false);
+        setFolderPickerFor(null); setIsAddToFolderOpen(false);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isModalOpen, isImportOpen, isFetchOpen]);
+  }, [isModalOpen, isImportOpen, isFetchOpen, folderPickerFor, isAddToFolderOpen]);
+
+  const fetchFolders = async () => {
+    if (!user) { setFolders([]); return; }
+    try {
+      const res = await userFetch(user, `/api/connections/${connectionId}/folders`);
+      if (res.ok) setFolders(await res.json());
+    } catch (err) {
+      console.error("Failed to load folders", err);
+    }
+  };
+
+  const selectFolder = (folderId: string | null) => {
+    setActiveFolderIdState(folderId);
+    writeActiveFolder(connectionId, folderId);
+  };
+
+  const handleCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newFolderName.trim();
+    if (!name) return;
+    setFolderError("");
+    const res = await userFetch(user, `/api/connections/${connectionId}/folders`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    const result = await res.json();
+    if (!res.ok) { setFolderError(result.error || "Failed to create folder"); return; }
+    setNewFolderName("");
+    setIsCreatingFolder(false);
+    await fetchFolders();
+    selectFolder(result.data.id);
+  };
+
+  const handleRenameFolder = async (e: React.FormEvent, folderId: string) => {
+    e.preventDefault();
+    const name = renameDraft.trim();
+    if (!name) return;
+    setFolderError("");
+    const res = await userFetch(user, `/api/connections/${connectionId}/folders/${folderId}`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    });
+    const result = await res.json();
+    if (!res.ok) { setFolderError(result.error || "Failed to rename folder"); return; }
+    setRenamingFolderId(null);
+    fetchFolders();
+  };
+
+  const handleDeleteFolder = async (folder: FolderRow) => {
+    if (!window.confirm(`Delete folder "${folder.name}"? The tables in it stay configured — only the folder is removed.`)) return;
+    const res = await userFetch(user, `/api/connections/${connectionId}/folders/${folder.id}`, { method: "DELETE" });
+    if (res.ok) {
+      if (activeFolderId === folder.id) selectFolder(null);
+      fetchFolders();
+    }
+  };
+
+  const addTablesToFolder = async (folderId: string, dataSourceIds: string[]) => {
+    const res = await userFetch(user, `/api/connections/${connectionId}/folders/${folderId}/tables`, {
+      method: "POST",
+      body: JSON.stringify({ dataSourceIds }),
+    });
+    if (!res.ok) alert((await res.json()).error || "Failed to add to folder");
+  };
+
+  const removeTableFromFolder = async (folderId: string, dataSourceId: string) => {
+    const res = await userFetch(
+      user,
+      `/api/connections/${connectionId}/folders/${folderId}/tables?dataSourceId=${dataSourceId}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) alert((await res.json()).error || "Failed to remove from folder");
+  };
+
+  const toggleTableInFolder = async (folder: FolderRow, dataSourceId: string) => {
+    if (folder.data_source_ids.includes(dataSourceId)) await removeTableFromFolder(folder.id, dataSourceId);
+    else await addTablesToFolder(folder.id, [dataSourceId]);
+    fetchFolders();
+  };
+
+  const openAddToFolderModal = () => {
+    setAddToFolderSelected(new Set());
+    setAddToFolderSearch("");
+    setIsAddToFolderOpen(true);
+  };
+
+  const handleAddToFolderSubmit = async () => {
+    if (!activeFolder || addToFolderSelected.size === 0) return;
+    setAddToFolderSubmitting(true);
+    await addTablesToFolder(activeFolder.id, Array.from(addToFolderSelected));
+    setAddToFolderSubmitting(false);
+    setIsAddToFolderOpen(false);
+    fetchFolders();
+  };
 
   const fetchAll = async () => {
     try {
@@ -189,7 +354,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
 
     try {
       const res = await fetch(`/api/connections/${connectionId}/tables?id=${id}`, { method: "DELETE" });
-      if (res.ok) fetchAll();
+      if (res.ok) { fetchAll(); fetchFolders(); }
     } catch (err) {
       console.error(err);
     }
@@ -356,105 +521,327 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
   };
 
   return (
-    <div className="container">
-      <div style={{ marginTop: "2rem", marginBottom: "2rem" }}>
-        <div className="breadcrumb">
-          <Link href="/"><ArrowLeft size={14} style={{ display: "inline-flex", verticalAlign: "middle" }} /> Connections</Link>
-          <span>/</span>
-          <span>{connection?.name || "..."}</span>
-        </div>
-        <h1 style={{ fontSize: "2rem" }}>{connection?.name || "Loading..."}</h1>
-        {connection && (
-          <p style={{ color: "var(--text-secondary)", fontFamily: "monospace", fontSize: "0.875rem" }}>
-            {connection.host}:{connection.port} / {connection.database_name}
-          </p>
-        )}
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "2rem", flexWrap: "wrap" }}>
-        <div style={{ position: "relative", flex: 1, minWidth: "220px", maxWidth: "360px" }}>
-          <Search size={15} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", pointerEvents: "none" }} />
-          <input
-            type="text"
-            placeholder="Search tables..."
-            className="input-field"
-            style={{ paddingLeft: "32px", paddingRight: searchQuery ? "32px" : "12px", width: "100%" }}
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", display: "flex", padding: "2px" }}>
-              <X size={14} />
-            </button>
-          )}
+    <div className="container conn-page">
+      <header className="page-header">
+        <div style={{ minWidth: 0 }}>
+          <div className="breadcrumb">
+            <Link href="/"><ArrowLeft size={14} style={{ display: "inline-flex", verticalAlign: "middle" }} /> Connections</Link>
+            <span>/</span>
+            <span>{connection?.name || "..."}</span>
+          </div>
+          <div className="page-header-title">
+            <h1>{connection?.name || "Loading..."}</h1>
+            {connection && (
+              <span className="conn-host-pill">{connection.host}:{connection.port} / {connection.database_name}</span>
+            )}
+          </div>
         </div>
 
-        <div style={{ flex: 1 }} />
+        <div className="page-header-actions">
+          <Link href={`/${connectionId}/console`} className="btn btn-outline btn-sm">
+            <Terminal size={15} /> Query Console
+          </Link>
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={openFetchModal}
+            onMouseEnter={() => fetchIconRef.current?.startAnimation()}
+            onMouseLeave={() => fetchIconRef.current?.stopAnimation()}
+          >
+            <FetchIcon ref={fetchIconRef} size={15} /> Fetch from DB
+          </button>
+          <button className="btn btn-outline btn-sm" onClick={openImportModal} disabled={allConnections.length < 2}>
+            <Download size={15} /> Import
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={openAddModal}>
+            <Plus size={15} /> Add Table
+          </button>
+        </div>
+      </header>
 
-        <Link href={`/${connectionId}/console`} className="btn btn-outline">
-          <Terminal size={16} /> Query Console
-        </Link>
+      <div className="explorer-panel">
+        <aside className="folder-rail">
+          <button
+            className={`folder-item ${!activeFolder ? "active" : ""}`}
+            onClick={() => selectFolder(null)}
+          >
+            <Layers size={15} />
+            <span className="folder-item-name">All Tables</span>
+            <span className="folder-item-count">{dataSources.length}</span>
+          </button>
 
-        <button
-          className="btn btn-outline"
-          onClick={openFetchModal}
-          onMouseEnter={() => fetchIconRef.current?.startAnimation()}
-          onMouseLeave={() => fetchIconRef.current?.stopAnimation()}
-        >
-          <FetchIcon ref={fetchIconRef} size={16} /> Fetch Tables from Database
-        </button>
-        <button className="btn btn-outline" onClick={openImportModal} disabled={allConnections.length < 2}>
-          <Download size={18} /> Import Tables
-        </button>
-        <button className="btn btn-primary" onClick={openAddModal}>
-          <Plus size={18} /> Add Table Config
-        </button>
-      </div>
+          <div className="folder-sidebar-heading">My Folders</div>
 
-      {loading ? (
-        <div className="empty-state">Loading configurations...</div>
-      ) : dataSources.length === 0 ? (
-        <div className="empty-state">No tables configured yet for this connection. Add one, fetch from the database, or import from another connection, to get started.</div>
-      ) : filteredDataSources.length === 0 ? (
-        <div className="empty-state">No tables match "{searchQuery}".</div>
-      ) : (
-        <div className="grid-cards">
-          {filteredDataSources.map(ds => {
-            const IconComponent = ICONS[ds.icon] || Database;
-            return (
-              <Link href={`/${connectionId}/${ds.table_id}`} key={ds.id}>
-                <div className="glass-card" style={{ height: "100%", display: "flex", flexDirection: "column", cursor: "pointer", position: "relative" }}>
-                  <div style={{ position: "absolute", top: "1rem", right: "1rem", display: "flex", gap: "0.4rem" }}>
+          {!user ? (
+            <p className="folder-sidebar-hint">Set your name in the top bar to create your own folders.</p>
+          ) : (
+            <>
+              {folders.map(f => renamingFolderId === f.id ? (
+                <form key={f.id} onSubmit={e => handleRenameFolder(e, f.id)} className="folder-inline-form">
+                  <input
+                    autoFocus
+                    className="input-field"
+                    value={renameDraft}
+                    onChange={e => setRenameDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Escape") setRenamingFolderId(null); }}
+                    onBlur={() => setRenamingFolderId(null)}
+                  />
+                </form>
+              ) : (
+                <div key={f.id} className={`folder-item ${activeFolderId === f.id ? "active" : ""}`} onClick={() => selectFolder(f.id)}>
+                  {activeFolderId === f.id ? <FolderOpen size={15} /> : <Folder size={15} />}
+                  <span className="folder-item-name" title={f.name}>{f.name}</span>
+                  <span className="folder-item-count">{f.data_source_ids.length}</span>
+                  <span className="folder-item-actions">
                     <button
-                      onClick={(e) => openEditModal(e, ds)}
-                      className="btn-icon"
-                      style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--accent-color)", opacity: 0.6 }}
-                      title="Edit Table Config"
+                      className="folder-icon-btn"
+                      title="Rename folder"
+                      onClick={e => { e.stopPropagation(); setRenamingFolderId(f.id); setRenameDraft(f.name); setFolderError(""); }}
                     >
-                      <Pencil size={16} />
+                      <Pencil size={12} />
                     </button>
                     <button
-                      onClick={(e) => handleDelete(e, ds.id)}
-                      className="btn-icon"
-                      style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--danger-color)", opacity: 0.5 }}
-                      title="Delete Table Config"
+                      className="folder-icon-btn danger"
+                      title="Delete folder"
+                      onClick={e => { e.stopPropagation(); handleDeleteFolder(f); }}
                     >
-                      <Trash2 size={18} />
+                      <Trash2 size={12} />
                     </button>
-                  </div>
-                  <div style={{ marginBottom: "1rem" }}>
-                    <IconComponent size={32} style={{ color: ds.color }} />
-                  </div>
-                  <h3 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>{ds.display_name}</h3>
-                  <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", flexGrow: 1 }}>{ds.description}</p>
-                  <div style={{ marginTop: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--accent-color)" }}>
-                    <span style={{ fontSize: "0.875rem", fontWeight: 500 }}>Manage Table</span>
-                    <span>→</span>
-                  </div>
+                  </span>
                 </div>
-              </Link>
-            );
-          })}
+              ))}
+
+              {isCreatingFolder ? (
+                <form onSubmit={handleCreateFolder} className="folder-inline-form">
+                  <input
+                    autoFocus
+                    className="input-field"
+                    placeholder="Folder name"
+                    value={newFolderName}
+                    onChange={e => setNewFolderName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Escape") setIsCreatingFolder(false); }}
+                    onBlur={() => { if (!newFolderName.trim()) setIsCreatingFolder(false); }}
+                  />
+                </form>
+              ) : (
+                <button
+                  className="folder-new-btn"
+                  onClick={() => { setIsCreatingFolder(true); setNewFolderName(""); setFolderError(""); }}
+                >
+                  <FolderPlus size={15} /> New folder
+                </button>
+              )}
+
+              {folderError && <p className="folder-sidebar-hint" style={{ color: "var(--danger-color)" }}>{folderError}</p>}
+            </>
+          )}
+        </aside>
+
+        <section className="explorer-main">
+          <div className="explorer-toolbar">
+            <div className="explorer-title">
+              {activeFolder ? <FolderOpen size={18} /> : <Layers size={18} />}
+              <h2>{activeFolder ? activeFolder.name : "All Tables"}</h2>
+              <span className="count-pill">{filteredDataSources.length}</span>
+            </div>
+
+            <div className="search-box">
+              <Search size={14} />
+              <input
+                type="text"
+                placeholder={activeFolder ? `Search in ${activeFolder.name}` : "Search tables"}
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} title="Clear search">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {activeFolder && (
+              <button className="btn btn-primary btn-sm" onClick={openAddToFolderModal} disabled={dataSources.length === 0}>
+                <Plus size={15} /> Add Tables
+              </button>
+            )}
+          </div>
+
+          <div className="explorer-body">
+          {loading ? (
+            <div className="empty-block"><Loader2 size={18} className="spin" /> Loading tables…</div>
+          ) : dataSources.length === 0 ? (
+            <div className="empty-block">
+              <span className="empty-block-icon"><Database size={20} /></span>
+              <strong>No tables configured yet</strong>
+              <span>Add one, fetch from the database, or import from another connection.</span>
+            </div>
+          ) : filteredDataSources.length === 0 ? (
+            searchQuery ? (
+              <div className="empty-block">
+                <span className="empty-block-icon"><Search size={20} /></span>
+                <strong>No matches</strong>
+                <span>Nothing matches &ldquo;{searchQuery}&rdquo;{activeFolder ? ` in ${activeFolder.name}` : ""}.</span>
+              </div>
+            ) : (
+              <div className="empty-block">
+                <span className="empty-block-icon"><FolderOpen size={20} /></span>
+                <strong>This folder is empty</strong>
+                <span>Pick tables from this connection to group them here. A table can be in any number of folders.</span>
+                <button className="btn btn-outline btn-sm" onClick={openAddToFolderModal} style={{ marginTop: "0.5rem" }}>
+                  <Plus size={15} /> Add Tables
+                </button>
+              </div>
+            )
+          ) : (
+            <div className="table-cards">
+              {filteredDataSources.map(ds => {
+                const IconComponent = ICONS[ds.icon] || Database;
+                const dsFolders = foldersByDataSource.get(ds.id) || [];
+                return (
+                  <Link href={`/${connectionId}/${ds.table_id}`} key={ds.id} className="table-card">
+                    <div className="table-card-top">
+                      <span className="table-card-icon" style={{ color: ds.color, background: `${ds.color}1f` }}>
+                        <IconComponent size={20} />
+                      </span>
+                      <div className="table-card-actions">
+                        {user && (
+                          <button
+                            onClick={e => { e.preventDefault(); setFolderPickerFor(ds); }}
+                            className="folder-icon-btn"
+                            title="Add to folders"
+                          >
+                            <FolderPlus size={15} />
+                          </button>
+                        )}
+                        {activeFolder && (
+                          <button
+                            onClick={async e => { e.preventDefault(); await removeTableFromFolder(activeFolder.id, ds.id); fetchFolders(); }}
+                            className="folder-icon-btn"
+                            title={`Remove from ${activeFolder.name}`}
+                          >
+                            <FolderMinus size={15} />
+                          </button>
+                        )}
+                        <button onClick={e => openEditModal(e, ds)} className="folder-icon-btn" title="Edit Table Config">
+                          <Pencil size={15} />
+                        </button>
+                        <button onClick={e => handleDelete(e, ds.id)} className="folder-icon-btn danger" title="Delete Table Config">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                    <h3 className="table-card-title">{ds.display_name}</h3>
+                    <div className="table-card-meta">
+                      <span>{ds.table_id}</span>
+                      {ds.schema_name && ds.schema_name !== "public" && <span className="schema-badge">{ds.schema_name}</span>}
+                    </div>
+                    {ds.description && <p className="table-card-desc">{ds.description}</p>}
+                    {dsFolders.length > 0 && (
+                      <div className="folder-chips">
+                        {dsFolders.map(f => (
+                          <span key={f.id} className="folder-chip"><Folder size={11} /> {f.name}</span>
+                        ))}
+                      </div>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+          </div>
+        </section>
+      </div>
+
+      {folderPickerFor && (
+        <div className="modal-overlay" onClick={() => setFolderPickerFor(null)}>
+          <div className="modal-content" style={{ maxWidth: "420px" }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ fontSize: "1.25rem", marginBottom: 0 }}>Folders for {folderPickerFor.display_name}</h2>
+              <button className="btn btn-icon btn-outline" onClick={() => setFolderPickerFor(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              {folders.length === 0 ? (
+                <p style={{ color: "var(--text-secondary)" }}>You don&apos;t have any folders yet. Create one from the sidebar first.</p>
+              ) : (
+                <div className="picker-list">
+                  {folders.map(f => {
+                    const inFolder = f.data_source_ids.includes(folderPickerFor.id);
+                    return (
+                      <label key={f.id} className="picker-row">
+                        <input type="checkbox" checked={inFolder} onChange={() => toggleTableInFolder(f, folderPickerFor.id)} />
+                        <Folder size={15} style={{ color: "var(--text-secondary)" }} />
+                        <span style={{ flex: 1 }}>{f.name}</span>
+                        {inFolder && <Check size={14} style={{ color: "var(--success-color)" }} />}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-primary" onClick={() => setFolderPickerFor(null)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAddToFolderOpen && activeFolder && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2 style={{ marginBottom: 0 }}>Add Tables to {activeFolder.name}</h2>
+              <button className="btn btn-icon btn-outline" onClick={() => setIsAddToFolderOpen(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="input-group">
+                <div style={{ position: "relative" }}>
+                  <Search size={15} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", pointerEvents: "none" }} />
+                  <input
+                    type="text"
+                    placeholder="Search configured tables..."
+                    className="input-field"
+                    style={{ paddingLeft: "32px" }}
+                    value={addToFolderSearch}
+                    onChange={e => setAddToFolderSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+              {addToFolderCandidates.length === 0 ? (
+                <p style={{ color: "var(--text-secondary)", padding: "1rem 0" }}>
+                  {addToFolderSearch ? `No tables match "${addToFolderSearch}".` : "Every configured table is already in this folder."}
+                </p>
+              ) : (
+                <div className="picker-list" style={{ maxHeight: "360px" }}>
+                  {addToFolderCandidates.map(ds => (
+                    <label key={ds.id} className="picker-row">
+                      <input
+                        type="checkbox"
+                        checked={addToFolderSelected.has(ds.id)}
+                        onChange={() => setAddToFolderSelected(prev => {
+                          const next = new Set(prev);
+                          if (next.has(ds.id)) next.delete(ds.id); else next.add(ds.id);
+                          return next;
+                        })}
+                      />
+                      <span style={{ flex: 1 }}>{ds.display_name}</span>
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontFamily: "monospace" }}>{ds.table_id}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-outline" onClick={() => setIsAddToFolderOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleAddToFolderSubmit}
+                disabled={addToFolderSelected.size === 0 || addToFolderSubmitting}
+              >
+                {addToFolderSubmitting ? "Adding…" : `Add ${addToFolderSelected.size || ""}`.trim()}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
