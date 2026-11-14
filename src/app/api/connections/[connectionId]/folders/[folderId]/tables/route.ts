@@ -4,7 +4,7 @@ import { getRequestUser } from "@/lib/currentUser";
 
 type Params = { params: Promise<{ connectionId: string; folderId: string }> };
 
-const noUser = () => NextResponse.json({ error: "Set your name first — folders are per user" }, { status: 401 });
+const noUser = () => NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
 async function ownsFolder(folderId: string, connectionId: string, user: string): Promise<boolean> {
   const result = await controlQuery(
@@ -18,7 +18,7 @@ async function ownsFolder(folderId: string, connectionId: string, user: string):
 // are linked (the join filters out anything else); already-linked ones are a no-op.
 export async function POST(request: Request, { params }: Params) {
   const { connectionId, folderId } = await params;
-  const user = getRequestUser(request);
+  const user = await getRequestUser(request);
   if (!user) return noUser();
 
   try {
@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: Params) {
 // ?dataSourceId=... — removes the table from this folder only.
 export async function DELETE(request: Request, { params }: Params) {
   const { connectionId, folderId } = await params;
-  const user = getRequestUser(request);
+  const user = await getRequestUser(request);
   if (!user) return noUser();
 
   const dataSourceId = new URL(request.url).searchParams.get("dataSourceId");

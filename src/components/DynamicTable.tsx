@@ -17,6 +17,7 @@ interface DynamicTableProps {
   connectionId: string;
   onEdit: (row: any) => void;
   onDelete: (id: string) => void;
+  canEdit?: boolean;
   onFilterChanged?: (model: ColumnFilterModel | null) => void;
 }
 
@@ -208,6 +209,7 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
   connectionId,
   onEdit,
   onDelete,
+  canEdit = true,
   onFilterChanged,
 }, ref) {
   const gridRef = useRef<AgGridReact>(null);
@@ -244,7 +246,7 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
       flex: 1,
       cellRenderer: (params: any) => <DataCell value={params.value} />,
     })),
-    {
+    ...(!canEdit ? [] : [{
       headerName: "Actions",
       field: "__actions",
       pinned: "right" as const,
@@ -273,8 +275,8 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
           </button>
         </div>
       ),
-    },
-  ], [schemaColumns, tableName, connectionId, primaryKey]);
+    }]),
+  ], [schemaColumns, tableName, connectionId, primaryKey, canEdit]);
 
   const defaultColDef: ColDef = {
     resizable: true,

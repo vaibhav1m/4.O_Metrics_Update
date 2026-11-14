@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
+import { useMe } from "@/lib/useMe";
 import { Loader2, Trash2, AlertTriangle } from "lucide-react";
 import {
   ArrowLeftIcon as ArrowLeft,
@@ -34,6 +35,8 @@ interface QueryLog {
 }
 
 export default function ConsolePage({ params }: { params: Promise<{ connectionId: string }> }) {
+  const { can } = useMe();
+  const canWrite = can("dbx.console", "EDIT");
   const { connectionId } = use(params);
 
   const [connection, setConnection] = useState<any>(null);
@@ -160,6 +163,9 @@ export default function ConsolePage({ params }: { params: Promise<{ connectionId
             {running ? <Loader2 size={16} className="spin" /> : <Play size={16} />} Run
           </button>
           <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>⌘/Ctrl + Enter</span>
+          {!canWrite && (
+            <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Read-only access: statements that modify data are blocked.</span>
+          )}
 
           <div style={{ flex: 1 }} />
 
@@ -257,9 +263,11 @@ export default function ConsolePage({ params }: { params: Promise<{ connectionId
         <div style={{ marginTop: "1rem" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem" }}>
             <h2 style={{ fontSize: "1.1rem", margin: 0 }}>Query History</h2>
-            <button className="btn btn-outline" onClick={clearHistory} disabled={logs.length === 0}>
-              <Trash2 size={14} /> Clear History
-            </button>
+            {canWrite && (
+              <button className="btn btn-outline" onClick={clearHistory} disabled={logs.length === 0}>
+                <Trash2 size={14} /> Clear History
+              </button>
+            )}
           </div>
 
           {loadingLogs ? (

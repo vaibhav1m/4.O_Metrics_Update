@@ -5,7 +5,8 @@ import Link from "next/link";
 // LayoutTemplate, BoxSelect, Trash2, Pencil have no lucide-animated equivalent;
 // Loader2 stays static since it needs a continuous CSS spin, not a hover animation.
 import { LayoutTemplate, BoxSelect, Trash2, Pencil, Loader2, Folder, FolderOpen, FolderPlus, FolderMinus, Layers, Check } from "lucide-react";
-import { useCurrentUser, userFetch } from "@/lib/useCurrentUser";
+import { useMe, useCurrentUser } from "@/lib/useMe";
+import { jsonFetch } from "@/lib/jsonFetch";
 import {
   DatabaseIcon as Database,
   SettingsIcon as Settings,
@@ -104,6 +105,10 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
 
   // Folders (per user, per connection)
   const user = useCurrentUser();
+  const { can } = useMe();
+  const canEditTables = can("dbx.tables", "EDIT");
+  const canViewFolders = can("dbx.folders", "VIEW");
+  const canEditFolders = can("dbx.folders", "EDIT");
   const [folders, setFolders] = useState<FolderRow[]>([]);
   const [activeFolderId, setActiveFolderIdState] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -174,7 +179,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
 
   useEffect(() => {
     fetchFolders();
-  }, [connectionId, user]);
+  }, [connectionId, user, canViewFolders]);
 
   useEffect(() => {
     if (!isModalOpen && !isImportOpen && !isFetchOpen && !folderPickerFor && !isAddToFolderOpen) return;
@@ -189,9 +194,9 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
   }, [isModalOpen, isImportOpen, isFetchOpen, folderPickerFor, isAddToFolderOpen]);
 
   const fetchFolders = async () => {
-    if (!user) { setFolders([]); return; }
+    if (!user || !canViewFolders) { setFolders([]); return; }
     try {
-      const res = await userFetch(user, `/api/connections/${connectionId}/folders`);
+      const res = await jsonFetch(`/api/connections/${connectionId}/folders`);
       if (res.ok) setFolders(await res.json());
     } catch (err) {
       console.error("Failed to load folders", err);
@@ -208,7 +213,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
     const name = newFolderName.trim();
     if (!name) return;
     setFolderError("");
-    const res = await userFetch(user, `/api/connections/${connectionId}/folders`, {
+    const res = await jsonFetch(`/api/connections/${connectionId}/folders`, {
       method: "POST",
       body: JSON.stringify({ name }),
     });
@@ -225,7 +230,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
     const name = renameDraft.trim();
     if (!name) return;
     setFolderError("");
-    const res = await userFetch(user, `/api/connections/${connectionId}/folders/${folderId}`, {
+    const res = await jsonFetch(`/api/connections/${connectionId}/folders/${folderId}`, {
       method: "PUT",
       body: JSON.stringify({ name }),
     });
@@ -237,7 +242,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
 
   const handleDeleteFolder = async (folder: FolderRow) => {
     if (!window.confirm(`Delete folder "${folder.name}"? The tables in it stay configured — only the folder is removed.`)) return;
-    const res = await userFetch(user, `/api/connections/${connectionId}/folders/${folder.id}`, { method: "DELETE" });
+    const res = await jsonFetch(`/api/connections/${connectionId}/folders/${folder.id}`, { method: "DELETE" });
     if (res.ok) {
       if (activeFolderId === folder.id) selectFolder(null);
       fetchFolders();
@@ -245,7 +250,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
   };
 
   const addTablesToFolder = async (folderId: string, dataSourceIds: string[]) => {
-    const res = await userFetch(user, `/api/connections/${connectionId}/folders/${folderId}/tables`, {
+    const res = await jsonFetch(`/api/connections/${connectionId}/folders/${folderId}/tables`, {
       method: "POST",
       body: JSON.stringify({ dataSourceIds }),
     });
@@ -253,9 +258,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
   };
 
   const removeTableFromFolder = async (folderId: string, dataSourceId: string) => {
-    const res = await userFetch(
-      user,
-      `/api/connections/${connectionId}/folders/${folderId}/tables?dataSourceId=${dataSourceId}`,
+    const res = await jsonFetch(`/api/connections/${connectionId}/folders/${folderId}/tables?dataSourceId=${dataSourceId}`,
       { method: "DELETE" }
     );
     if (!res.ok) alert((await res.json()).error || "Failed to remove from folder");
@@ -538,9 +541,12 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
         </div>
 
         <div className="page-header-actions">
-          <Link href={`/${connectionId}/console`} className="btn btn-outline btn-sm">
-            <Terminal size={15} /> Query Console
-          </Link>
+          {can("dbx.console", "VIEW") && (
+            <Link href={`/${connectionId}/console`} className="btn btn-outline btn-sm">
+              <Terminal size={15} /> Query Console
+            </Link>
+          )}
+          {canEditTables && (<>
           <button
             className="btn btn-outline btn-sm"
             onClick={openFetchModal}
@@ -555,6 +561,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
           <button className="btn btn-primary btn-sm" onClick={openAddModal}>
             <Plus size={15} /> Add Table
           </button>
+          </>)}
         </div>
       </header>
 
@@ -571,8 +578,8 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
 
           <div className="folder-sidebar-heading">My Folders</div>
 
-          {!user ? (
-            <p className="folder-sidebar-hint">Set your name in the top bar to create your own folders.</p>
+          {!user || !canViewFolders ? (
+            <p className="folder-sidebar-hint">{user ? "You do not have access to folders." : "Loading…"}</p>
           ) : (
             <>
               {folders.map(f => renamingFolderId === f.id ? (
@@ -591,7 +598,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                   {activeFolderId === f.id ? <FolderOpen size={15} /> : <Folder size={15} />}
                   <span className="folder-item-name" title={f.name}>{f.name}</span>
                   <span className="folder-item-count">{f.data_source_ids.length}</span>
-                  <span className="folder-item-actions">
+                  {canEditFolders && <span className="folder-item-actions">
                     <button
                       className="folder-icon-btn"
                       title="Rename folder"
@@ -606,11 +613,11 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                     >
                       <Trash2 size={12} />
                     </button>
-                  </span>
+                  </span>}
                 </div>
               ))}
 
-              {isCreatingFolder ? (
+              {!canEditFolders ? null : isCreatingFolder ? (
                 <form onSubmit={handleCreateFolder} className="folder-inline-form">
                   <input
                     autoFocus
@@ -659,7 +666,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
               )}
             </div>
 
-            {activeFolder && (
+            {activeFolder && canEditFolders && (
               <button className="btn btn-primary btn-sm" onClick={openAddToFolderModal} disabled={dataSources.length === 0}>
                 <Plus size={15} /> Add Tables
               </button>
@@ -687,9 +694,10 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                 <span className="empty-block-icon"><FolderOpen size={20} /></span>
                 <strong>This folder is empty</strong>
                 <span>Pick tables from this connection to group them here. A table can be in any number of folders.</span>
+                {canEditFolders && (
                 <button className="btn btn-outline btn-sm" onClick={openAddToFolderModal} style={{ marginTop: "0.5rem" }}>
                   <Plus size={15} /> Add Tables
-                </button>
+                </button>)}
               </div>
             )
           ) : (
@@ -704,7 +712,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                         <IconComponent size={20} />
                       </span>
                       <div className="table-card-actions">
-                        {user && (
+                        {user && canEditFolders && (
                           <button
                             onClick={e => { e.preventDefault(); setFolderPickerFor(ds); }}
                             className="folder-icon-btn"
@@ -713,7 +721,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                             <FolderPlus size={15} />
                           </button>
                         )}
-                        {activeFolder && (
+                        {activeFolder && canEditFolders && (
                           <button
                             onClick={async e => { e.preventDefault(); await removeTableFromFolder(activeFolder.id, ds.id); fetchFolders(); }}
                             className="folder-icon-btn"
@@ -722,12 +730,14 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                             <FolderMinus size={15} />
                           </button>
                         )}
+                        {canEditTables && (<>
                         <button onClick={e => openEditModal(e, ds)} className="folder-icon-btn" title="Edit Table Config">
                           <Pencil size={15} />
                         </button>
                         <button onClick={e => handleDelete(e, ds.id)} className="folder-icon-btn danger" title="Delete Table Config">
                           <Trash2 size={15} />
                         </button>
+                        </>)}
                       </div>
                     </div>
                     <h3 className="table-card-title">{ds.display_name}</h3>

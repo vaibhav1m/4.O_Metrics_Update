@@ -16,6 +16,7 @@ import {
   EyeIcon as Eye,
 } from "lucide-animated";
 import Link from "next/link";
+import { useMe } from "@/lib/useMe";
 import DynamicTable, { type DynamicTableHandle, type ColumnFilterModel } from "@/components/DynamicTable";
 import EditModal from "@/components/EditModal";
 
@@ -30,6 +31,8 @@ interface ImportFilterRow {
 }
 
 export default function TablePage({ params }: { params: Promise<{ connectionId: string; table: string }> }) {
+  const { can } = useMe();
+  const canEditData = can("dbx.data", "EDIT");
   const { connectionId, table } = use(params);
   const [data, setData] = useState<any[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
@@ -111,6 +114,7 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
     fetch("/api/connections")
       .then(r => r.json())
       .then(list => {
+        if (!Array.isArray(list)) return;
         setAllConnections(list);
         setConnection(list.find((c: any) => String(c.id) === connectionId) || null);
       })
@@ -249,7 +253,8 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
     try {
       setImportLoadingTables(true);
       const res = await fetch(`/api/connections/${sourceId}/tables`);
-      setImportSrcTables(await res.json());
+      const list = await res.json();
+      setImportSrcTables(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error("Failed to load source tables", err);
     } finally {
@@ -474,6 +479,7 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
+        {canEditData && (<>
         {/* Import data from another connection */}
         <button onClick={openImportModal} className="btn btn-outline">
           <Download size={18} /> Import Data
@@ -483,6 +489,7 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
         <button onClick={handleCreateNew} className="btn btn-primary" disabled={columns.length === 0}>
           <PlusCircle size={18} /> Add New Entry
         </button>
+        </>)}
       </div>
 
       {/* Row count info */}
@@ -521,6 +528,7 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
             connectionId={connectionId}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            canEdit={canEditData}
             onFilterChanged={handleColumnFiltersChanged}
           />
         )}

@@ -4,13 +4,13 @@ import { getRequestUser } from "@/lib/currentUser";
 
 type Params = { params: Promise<{ connectionId: string }> };
 
-const noUser = () => NextResponse.json({ error: "Set your name first — folders are per user" }, { status: 401 });
+const noUser = () => NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
 // The current user's folders on this connection, each with the ids of the data
 // sources inside it.
 export async function GET(request: Request, { params }: Params) {
   const { connectionId } = await params;
-  const user = getRequestUser(request);
+  const user = await getRequestUser(request);
   if (!user) return noUser();
 
   const result = await controlQuery(
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: Params) {
 
 export async function POST(request: Request, { params }: Params) {
   const { connectionId } = await params;
-  const user = getRequestUser(request);
+  const user = await getRequestUser(request);
   if (!user) return noUser();
 
   try {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { queryConnection } from "@/lib/connections";
 import { getDataSource, isValidIdentifier } from "@/lib/dataSource";
 import { query as controlQuery } from "@/lib/db";
+import { getRequestUser } from "@/lib/currentUser";
 
 type Params = { params: Promise<{ connectionId: string; tableName: string }> };
 
@@ -32,14 +33,14 @@ async function logAudit(
   action: "insert" | "update" | "delete",
   recordPk: string | null,
   before: any,
-  after: any
+  after: any,
+  changedBy: string | null
 ) {
   try {
-    // changed_by is left null until login is reimplemented.
     await controlQuery(
-      `INSERT INTO v3_t_dbexplorer_audit_logs (connection_id, table_name, action, record_pk, before_data, after_data)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [connectionId, tableName, action, recordPk, before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null]
+      `INSERT INTO v3_t_dbexplorer_audit_logs (connection_id, table_name, action, record_pk, before_data, after_data, changed_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [connectionId, tableName, action, recordPk, before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, changedBy]
     );
   } catch (err) {
     console.error("Failed to write audit log", err);
@@ -180,7 +181,7 @@ export async function POST(request: Request, { params }: Params) {
     const result = await queryConnection(connectionId, sql, values);
     const created = result.rows[0];
 
-    await logAudit(connectionId, tableName, "insert", created?.[primaryKey] != null ? String(created[primaryKey]) : null, null, created);
+    await logAudit(connectionId, tableName, "insert", created?.[primaryKey] != null ? String(created[primaryKey]) : null, null, created, await getRequestUser(request));
 
     return NextResponse.json({ data: created, message: "Record created successfully" }, { status: 201 });
   } catch (error: any) {
@@ -229,7 +230,7 @@ export async function PUT(request: Request, { params }: Params) {
     if (result.rowCount === 0) return NextResponse.json({ error: "Record not found" }, { status: 404 });
 
     const after = result.rows[0];
-    await logAudit(connectionId, tableName, "update", String(idValue), before, after);
+    await logAudit(connectionId, tableName, "update", String(idValue), before, after, await getRequestUser(request));
 
     return NextResponse.json({ data: after, message: "Record updated successfully" });
   } catch (error: any) {
@@ -258,7 +259,7 @@ export async function DELETE(request: Request, { params }: Params) {
 
     if (result.rowCount === 0) return NextResponse.json({ error: "Record not found" }, { status: 404 });
 
-    await logAudit(connectionId, tableName, "delete", idValue, result.rows[0], null);
+    await logAudit(connectionId, tableName, "delete", idValue, result.rows[0], null, await getRequestUser(request));
 
     return NextResponse.json({ message: "Record deleted successfully" });
   } catch (error: any) {

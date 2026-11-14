@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPoolFor } from "@/lib/connections";
 import { query as controlQuery } from "@/lib/db";
 import { classifyStatement } from "@/lib/sqlSafety";
+import { can, getSession } from "@/lib/session";
 
 const STATEMENT_TIMEOUT_MS = 30000;
 const MAX_RETURNED_ROWS = 500;
@@ -14,13 +15,14 @@ async function logQuery(opts: {
   rowCount: number | null;
   durationMs: number;
   errorMessage: string | null;
+  executedBy: string | null;
 }) {
   try {
     await controlQuery(
       `INSERT INTO v3_t_dbexplorer_query_logs
-         (connection_id, connection_name, sql_text, statement_kind, status, row_count, duration_ms, error_message)
-       VALUES ($1, (SELECT name FROM v3_t_dbexplorer_connections WHERE id = $1), $2, $3, $4, $5, $6, $7)`,
-      [opts.connectionId, opts.sql, opts.kind, opts.status, opts.rowCount, opts.durationMs, opts.errorMessage]
+         (connection_id, connection_name, sql_text, statement_kind, status, row_count, duration_ms, error_message, executed_by)
+       VALUES ($1, (SELECT name FROM v3_t_dbexplorer_connections WHERE id = $1), $2, $3, $4, $5, $6, $7, $8)`,
+      [opts.connectionId, opts.sql, opts.kind, opts.status, opts.rowCount, opts.durationMs, opts.errorMessage, opts.executedBy]
     );
   } catch (err) {
     console.error("Failed to write query log", err);
@@ -32,6 +34,9 @@ export async function POST(
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
   const { connectionId } = await params;
+  const session = await getSession(request);
+  if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  const executedBy = session.email;
 
   let sql = "";
   let kind: "read" | "write" = "write";
@@ -47,6 +52,15 @@ export async function POST(
     }
 
     kind = classifyStatement(sql);
+
+    // The proxy only guarantees dbx.console VIEW; anything classified as a write needs EDIT.
+    // Checked before the confirmation gate, so a read-only user is refused outright.
+    if (kind === "write" && !can(session, "dbx.console", "EDIT")) {
+      return NextResponse.json(
+        { error: "You have read-only access to the console: this statement may modify data or schema." },
+        { status: 403 }
+      );
+    }
 
     // The confirmation gate is enforced here, not just in the UI — a client that
     // skips the dialog still can't run a write without explicitly asking for it.
@@ -87,6 +101,7 @@ export async function POST(
         rowCount: typeof result?.rowCount === "number" ? result.rowCount : allRows.length,
         durationMs,
         errorMessage: null,
+        executedBy,
       });
 
       return NextResponse.json({
@@ -114,6 +129,7 @@ export async function POST(
         rowCount: null,
         durationMs,
         errorMessage: error.message,
+        executedBy,
       });
     }
     return NextResponse.json({ error: error.message, durationMs }, { status: 400 });

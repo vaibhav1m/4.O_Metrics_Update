@@ -3,6 +3,7 @@ import "./globals.css";
 import Link from "next/link";
 import BrandIcon from "@/components/BrandIcon";
 import UserBadge from "@/components/UserBadge";
+import { MeProvider } from "@/lib/useMe";
 
 export const metadata: Metadata = {
   title: "Database Explorer",
@@ -17,6 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <MeProvider>
         <nav className="nav-bar">
           <Link href="/">
             <div className="nav-brand">
@@ -32,6 +34,7 @@ export default function RootLayout({
         <main>
           {children}
         </main>
+        </MeProvider>
       </body>
     </html>
   );

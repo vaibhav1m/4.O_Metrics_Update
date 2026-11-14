@@ -7,6 +7,7 @@ import { Trash2, Pencil, Server, XCircle, Loader2 } from "lucide-react";
 // (Trash2, Pencil, Server, XCircle, and the spinning Loader2) stay on
 // lucide-react — either lucide-animated doesn't have them, or (for Loader2)
 // the icon needs a continuous CSS spin rather than a one-shot hover animation.
+import { useMe } from "@/lib/useMe";
 import { DatabaseIcon as Database, PlusIcon as Plus, CircleCheckIcon as CheckCircle2 } from "lucide-animated";
 
 const EMPTY_FORM = {
@@ -22,6 +23,9 @@ const EMPTY_FORM = {
 export default function Home() {
   const [connections, setConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState("");
+  const { can } = useMe();
+  const canEditConnections = can("dbx.connections", "EDIT");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -49,7 +53,8 @@ export default function Home() {
       setLoading(true);
       const res = await fetch("/api/connections");
       const data = await res.json();
-      setConnections(data);
+      if (!res.ok) { setListError(data?.error || "Could not load connections"); setConnections([]); }
+      else { setListError(""); setConnections(data); }
     } catch (err) {
       console.error("Failed to load connections", err);
     } finally {
@@ -170,12 +175,16 @@ export default function Home() {
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "2rem" }}>
-        <button className="btn btn-primary" onClick={openAddModal}>
-          <Plus size={18} /> Add Connection
-        </button>
+        {can("dbx.connections", "EDIT") && (
+          <button className="btn btn-primary" onClick={openAddModal}>
+            <Plus size={18} /> Add Connection
+          </button>
+        )}
       </div>
 
-      {loading ? (
+      {listError ? (
+        <div className="empty-state">{listError}</div>
+      ) : loading ? (
         <div className="empty-state">Loading connections...</div>
       ) : (
         <div className="grid-cards">
@@ -183,6 +192,7 @@ export default function Home() {
             <Link href={`/${conn.id}`} key={conn.id}>
               <div className="glass-card" style={{ height: "100%", display: "flex", flexDirection: "column", cursor: "pointer", position: "relative" }}>
                 <div style={{ position: "absolute", top: "1rem", right: "1rem", display: "flex", gap: "0.4rem" }}>
+                  {canEditConnections && (<>
                   <button
                     onClick={(e) => handleTestSaved(e, conn.id)}
                     className="btn-icon"
@@ -208,6 +218,7 @@ export default function Home() {
                   >
                     <Trash2 size={18} />
                   </button>
+                  </>)}
                 </div>
 
                 <div style={{ marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>

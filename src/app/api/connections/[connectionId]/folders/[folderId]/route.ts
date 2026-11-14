@@ -4,12 +4,12 @@ import { getRequestUser } from "@/lib/currentUser";
 
 type Params = { params: Promise<{ connectionId: string; folderId: string }> };
 
-const noUser = () => NextResponse.json({ error: "Set your name first — folders are per user" }, { status: 401 });
+const noUser = () => NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
 // Rename. Scoped by owner, so one user can't touch another's folder.
 export async function PUT(request: Request, { params }: Params) {
   const { connectionId, folderId } = await params;
-  const user = getRequestUser(request);
+  const user = await getRequestUser(request);
   if (!user) return noUser();
 
   try {
@@ -36,7 +36,7 @@ export async function PUT(request: Request, { params }: Params) {
 // Deletes the folder and its links (ON DELETE CASCADE) — never the tables' configs.
 export async function DELETE(request: Request, { params }: Params) {
   const { connectionId, folderId } = await params;
-  const user = getRequestUser(request);
+  const user = await getRequestUser(request);
   if (!user) return noUser();
 
   const result = await controlQuery(

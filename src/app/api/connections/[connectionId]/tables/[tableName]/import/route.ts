@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { queryConnection } from "@/lib/connections";
 import { query as controlQuery } from "@/lib/db";
+import { getRequestUser } from "@/lib/currentUser";
 import { buildImportPlan, isImportPlanError } from "@/lib/importPlan";
 
 const BATCH_SIZE = 500;
@@ -59,9 +60,9 @@ export async function POST(
     }
 
     await controlQuery(
-      `INSERT INTO v3_t_dbexplorer_audit_logs (connection_id, table_name, action, record_pk, after_data)
-       VALUES ($1, $2, 'insert', NULL, $3)`,
-      [connectionId, tableName, JSON.stringify({ importedFrom: { connectionId: body.sourceConnectionId, tableId: body.sourceTableId }, filters: body.filters, rowsImported: imported })]
+      `INSERT INTO v3_t_dbexplorer_audit_logs (connection_id, table_name, action, record_pk, after_data, changed_by)
+       VALUES ($1, $2, 'insert', NULL, $3, $4)`,
+      [connectionId, tableName, JSON.stringify({ importedFrom: { connectionId: body.sourceConnectionId, tableId: body.sourceTableId }, filters: body.filters, rowsImported: imported }), await getRequestUser(request)]
     ).catch(() => {});
 
     return NextResponse.json({
