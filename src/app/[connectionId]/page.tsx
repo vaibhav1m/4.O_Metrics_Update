@@ -966,7 +966,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                         {t.schema_name && t.schema_name !== "public" && (
                           <span style={{
                             fontSize: "0.68rem", fontWeight: 600, padding: "0.1rem 0.4rem", borderRadius: "999px",
-                            background: "rgba(192,132,252,0.15)", color: "#c084fc",
+                            background: "rgba(192,132,252,0.15)", color: "var(--tone-purple)",
                           }}>{t.schema_name}</span>
                         )}
                         {already && <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>Already added</span>}
@@ -979,7 +979,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
               {importResult && (
                 <div style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
                   {importResult.imported.length > 0 && (
-                    <div style={{ color: "#4ade80", display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.25rem" }}>
+                    <div style={{ color: "var(--tone-green)", display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.25rem" }}>
                       <CheckCircle2 size={14} /> Imported: {importResult.imported.join(", ")}
                     </div>
                   )}
@@ -987,7 +987,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                     <div style={{ color: "var(--text-secondary)", marginBottom: "0.25rem" }}>Already present: {importResult.skippedExisting.join(", ")}</div>
                   )}
                   {importResult.skippedMissing.length > 0 && (
-                    <div style={{ color: "#f87171" }}>Not found in this connection's database: {importResult.skippedMissing.join(", ")}</div>
+                    <div style={{ color: "var(--tone-red)" }}>Not found in this connection's database: {importResult.skippedMissing.join(", ")}</div>
                   )}
                 </div>
               )}
@@ -1055,7 +1055,7 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
                           {t.schema !== "public" && (
                             <span style={{
                               fontSize: "0.68rem", fontWeight: 600, padding: "0.1rem 0.4rem", borderRadius: "999px",
-                              background: "rgba(192,132,252,0.15)", color: "#c084fc",
+                              background: "rgba(192,132,252,0.15)", color: "var(--tone-purple)",
                             }}>{t.schema}</span>
                           )}
                         </label>
@@ -1090,12 +1090,12 @@ export default function ConnectionPage({ params }: { params: Promise<{ connectio
               {fetchResult && (
                 <div style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
                   {fetchResult.added.length > 0 && (
-                    <div style={{ color: "#4ade80", display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.25rem" }}>
+                    <div style={{ color: "var(--tone-green)", display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.25rem" }}>
                       <CheckCircle2 size={14} /> Added: {fetchResult.added.join(", ")}
                     </div>
                   )}
                   {fetchResult.failed.length > 0 && (
-                    <div style={{ color: "#f87171" }}>
+                    <div style={{ color: "var(--tone-red)" }}>
                       Failed: {fetchResult.failed.map(f => `${f.table} (${f.error})`).join(", ")}
                     </div>
                   )}

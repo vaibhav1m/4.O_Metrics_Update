@@ -230,12 +230,12 @@ export default function Home() {
                   <span style={{
                     fontSize: "0.7rem", fontWeight: 600, padding: "0.1rem 0.5rem", borderRadius: "999px",
                     background: conn.type === "trino" ? "rgba(192,132,252,0.15)" : "rgba(96,165,250,0.15)",
-                    color: conn.type === "trino" ? "#c084fc" : "#60a5fa", textTransform: "uppercase",
+                    color: conn.type === "trino" ? "var(--tone-purple)" : "#60a5fa", textTransform: "uppercase",
                   }}>
                     {conn.type}
                   </span>
-                  {conn.last_test_ok === true && <CheckCircle2 size={14} style={{ color: "#4ade80" }} />}
-                  {conn.last_test_ok === false && <XCircle size={14} style={{ color: "#f87171" }} />}
+                  {conn.last_test_ok === true && <CheckCircle2 size={14} style={{ color: "var(--tone-green)" }} />}
+                  {conn.last_test_ok === false && <XCircle size={14} style={{ color: "var(--tone-red)" }} />}
                 </div>
 
                 <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", flexGrow: 1, fontFamily: "monospace" }}>
@@ -322,8 +322,8 @@ export default function Home() {
                   <button type="button" className="btn btn-outline" onClick={handleTestInModal} disabled={testStatus === "testing"}>
                     {testStatus === "testing" ? <Loader2 size={15} className="spin" /> : <Server size={15} />} Test Connection
                   </button>
-                  {testStatus === "ok" && <span style={{ color: "#4ade80", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.3rem" }}><CheckCircle2 size={15} /> {testMessage}</span>}
-                  {testStatus === "fail" && <span style={{ color: "#f87171", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.3rem" }}><XCircle size={15} /> {testMessage}</span>}
+                  {testStatus === "ok" && <span style={{ color: "var(--tone-green)", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.3rem" }}><CheckCircle2 size={15} /> {testMessage}</span>}
+                  {testStatus === "fail" && <span style={{ color: "var(--tone-red)", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.3rem" }}><XCircle size={15} /> {testMessage}</span>}
                 </div>
               </div>
               <div className="modal-footer">

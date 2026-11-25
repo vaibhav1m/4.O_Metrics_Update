@@ -203,7 +203,7 @@ export default function ConsolePage({ params }: { params: Promise<{ connectionId
           className="glass-card"
           style={{ padding: "1rem", marginBottom: "1rem", borderColor: "rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.08)" }}
         >
-          <strong style={{ color: "#f87171", display: "block", marginBottom: "0.25rem" }}>Query failed</strong>
+          <strong style={{ color: "var(--tone-red)", display: "block", marginBottom: "0.25rem" }}>Query failed</strong>
           <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: "0.8rem", color: "var(--text-secondary)" }}>{error}</pre>
         </div>
       )}
@@ -212,11 +212,11 @@ export default function ConsolePage({ params }: { params: Promise<{ connectionId
       {result && (
         <div style={{ marginBottom: "1.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.6rem", fontSize: "0.8rem", color: "var(--text-secondary)", flexWrap: "wrap" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: "0.35rem", color: "#4ade80" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "0.35rem", color: "var(--tone-green)" }}>
               <CheckCircle2 size={14} /> {result.command || "OK"}
             </span>
-            <span><strong style={{ color: "#e2e8f0" }}>{result.rowCount}</strong> row{result.rowCount === 1 ? "" : "s"}</span>
-            <span><strong style={{ color: "#e2e8f0" }}>{result.durationMs}</strong> ms</span>
+            <span><strong style={{ color: "var(--text-primary)" }}>{result.rowCount}</strong> row{result.rowCount === 1 ? "" : "s"}</span>
+            <span><strong style={{ color: "var(--text-primary)" }}>{result.durationMs}</strong> ms</span>
             {result.statementCount > 1 && <span>{result.statementCount} statements</span>}
             {result.truncated && (
               <span style={{ color: "#f59e0b" }}>showing first {result.returnedRows} rows only</span>
@@ -303,7 +303,7 @@ export default function ConsolePage({ params }: { params: Promise<{ connectionId
                           color: log.statement_kind === "write" ? "#f59e0b" : "#60a5fa", textTransform: "uppercase",
                         }}>{log.statement_kind}</span>
                       </td>
-                      <td style={{ color: log.status === "success" ? "#4ade80" : "#f87171", fontSize: "0.78rem" }}>{log.status}</td>
+                      <td style={{ color: log.status === "success" ? "var(--tone-green)" : "var(--tone-red)", fontSize: "0.78rem" }}>{log.status}</td>
                       <td style={{ fontSize: "0.78rem" }}>{log.row_count ?? "—"}</td>
                       <td style={{ fontSize: "0.78rem" }}>{log.duration_ms != null ? `${log.duration_ms}ms` : "—"}</td>
                       <td

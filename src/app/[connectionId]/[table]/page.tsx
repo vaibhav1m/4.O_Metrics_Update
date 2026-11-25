@@ -408,7 +408,7 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
             {schemaName !== "public" && (
               <span style={{
                 fontSize: "0.7rem", fontWeight: 600, padding: "0.15rem 0.55rem", borderRadius: "999px",
-                background: "rgba(192,132,252,0.15)", color: "#c084fc", verticalAlign: "middle",
+                background: "rgba(192,132,252,0.15)", color: "var(--tone-purple)", verticalAlign: "middle",
               }}>{schemaName}</span>
             )}
           </h1>
@@ -468,7 +468,7 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
           style={{
             display: "flex", alignItems: "center", gap: "6px",
             borderColor: hasActiveFilters ? "rgba(239,68,68,0.4)" : "var(--surface-border)",
-            color: hasActiveFilters ? "#f87171" : "var(--text-secondary)",
+            color: hasActiveFilters ? "var(--tone-red)" : "var(--text-secondary)",
             opacity: hasActiveFilters ? 1 : 0.45,
             cursor: hasActiveFilters ? "pointer" : "not-allowed",
           }}
@@ -496,13 +496,13 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
       {!loading && (
         <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "0.6rem", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
           <span>
-            <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{filteredData.length}</span>
+            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{filteredData.length}</span>
             {searchTerm ? ` matching rows` : ` rows loaded`}
-            {searchTerm && <span> (filtered from <strong style={{ color: "#e2e8f0" }}>{data.length}</strong> loaded)</span>}
+            {searchTerm && <span> (filtered from <strong style={{ color: "var(--text-primary)" }}>{data.length}</strong> loaded)</span>}
           </span>
-          <span style={{ color: "rgba(255,255,255,0.15)" }}>|</span>
+          <span style={{ color: "var(--surface-border)" }}>|</span>
           <span>
-            <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{total.toLocaleString()}</span>
+            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{total.toLocaleString()}</span>
             {hasActiveFilters ? " matching records" : " total records in database"}
             {totalPages > 1 && <span> — page {page} of {totalPages} ({startRow}–{endRow} loaded)</span>}
           </span>
@@ -682,7 +682,7 @@ export default function TablePage({ params }: { params: Promise<{ connectionId: 
               )}
 
               {importResult && (
-                <div style={{ marginTop: "0.75rem", fontSize: "0.85rem", color: "#4ade80", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <div style={{ marginTop: "0.75rem", fontSize: "0.85rem", color: "var(--tone-green)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
                   <CheckCircle2 size={14} />
                   Imported {importResult.imported} of {importResult.sourceTotal} rows ({importResult.skippedExisting} already existed).
                 </div>

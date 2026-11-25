@@ -4,6 +4,7 @@ import { useRef, forwardRef, useImperativeHandle, useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef, IFilterComp, IFilterParams } from "ag-grid-community";
 import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
+import { useTheme } from "@/lib/useTheme";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -58,34 +59,34 @@ class ColumnFilterComp implements IFilterComp {
     );
 
     this.eGui.innerHTML = `
-      <div style="padding:10px;min-width:220px;max-width:280px;background:#1e293b;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
-        <div style="display:flex;align-items:center;gap:6px;background:#0f172a;border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:6px 8px;margin-bottom:8px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <div style="padding:10px;min-width:220px;max-width:280px;background:var(--surface-raised);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+        <div style="display:flex;align-items:center;gap:6px;background:var(--surface-solid);border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:6px 8px;margin-bottom:8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color:var(--text-secondary)" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <input id="filter-search" type="text" placeholder="Search values..." value="${this.searchText}"
-            style="background:none;border:none;outline:none;color:#e2e8f0;font-size:12px;width:100%;"/>
+            style="background:none;border:none;outline:none;color:var(--text-primary);font-size:12px;width:100%;"/>
         </div>
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
           <button id="select-all" style="font-size:11px;color:#3b82f6;background:none;border:none;cursor:pointer;padding:0;">Select all</button>
-          <button id="clear-all" style="font-size:11px;color:#94a3b8;background:none;border:none;cursor:pointer;padding:0;">Clear</button>
+          <button id="clear-all" style="font-size:11px;color:var(--text-secondary);background:none;border:none;cursor:pointer;padding:0;">Clear</button>
         </div>
         <div id="values-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">
           ${!this.isLoaded
-            ? `<div style="color:#64748b;font-size:12px;padding:8px 0;text-align:center;">Loading…</div>`
+            ? `<div style="color:var(--text-muted);font-size:12px;padding:8px 0;text-align:center;">Loading…</div>`
             : filtered.length === 0
-            ? `<div style="color:#64748b;font-size:12px;padding:8px 0;text-align:center;">No values found</div>`
+            ? `<div style="color:var(--text-muted);font-size:12px;padding:8px 0;text-align:center;">No values found</div>`
             : filtered.map(v => `
               <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;cursor:pointer;"
                 onmouseenter="this.style.background='rgba(59,130,246,0.1)'"
                 onmouseleave="this.style.background='transparent'">
                 <input type="checkbox" value="${v.replace(/"/g, "&quot;")}" ${this.selectedValues.has(v) ? "checked" : ""}
                   style="accent-color:#3b82f6;cursor:pointer;" class="val-cb"/>
-                <span style="color:#e2e8f0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                <span style="color:var(--text-primary);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                   title="${v.replace(/"/g, "&quot;")}">${v.length > 30 ? v.slice(0, 30) + "…" : v}</span>
               </label>`).join("")
           }
         </div>
         ${this.selectedValues.size > 0
-          ? `<div style="margin-top:6px;font-size:11px;color:#64748b;">${this.selectedValues.size} selected</div>`
+          ? `<div style="margin-top:6px;font-size:11px;color:var(--text-muted);">${this.selectedValues.size} selected</div>`
           : ""}
       </div>`;
 
@@ -212,6 +213,7 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
   canEdit = true,
   onFilterChanged,
 }, ref) {
+  const theme = useTheme();
   const gridRef = useRef<AgGridReact>(null);
   const onEditRef = useRef(onEdit);
   onEditRef.current = onEdit;
@@ -288,7 +290,7 @@ const DynamicTable = forwardRef<DynamicTableHandle, DynamicTableProps>(function 
 
   return (
     <div
-      className="ag-theme-alpine-dark"
+      className={`${theme === "light" ? "ag-theme-alpine" : "ag-theme-alpine-dark"} dbx-grid`}
       style={{ width: "100%", height: "calc(100vh - 280px)", minHeight: 400 }}
     >
       <AgGridReact

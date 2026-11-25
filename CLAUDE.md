@@ -227,5 +227,12 @@ catalog-qualified, and write support depends on the underlying connector.
 
 ### Styling
 
-All styles are in `src/app/globals.css` — a single CSS file with a glassmorphic dark theme using CSS
+All styles are in `src/app/globals.css` — a single CSS file with a glassmorphic theme using CSS
 variables. No CSS modules or Tailwind. Class names like `.btn`, `.glass-card`, `.modal`, `.breadcrumb`.
+
+**Light/dark mode**: dark tokens live on `:root`, light overrides on `:root[data-theme="light"]`. Use the
+tokens (`--surface-solid`, `--input-bg`, `--overlay-1`, `--tone-green`, …) rather than raw hex/rgba — a
+hardcoded dark colour won't flip. `ThemeToggle` in the nav sets `data-theme` and saves it to localStorage;
+`THEME_INIT_SCRIPT` (`src/lib/themeScript.ts`) applies it in `<head>` before paint (falls back to the OS
+preference). AG Grid swaps between `ag-theme-alpine` / `ag-theme-alpine-dark` via `useTheme()`, with our
+overrides on `.dbx-grid`.
