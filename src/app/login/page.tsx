@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
 import {
   AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Database, Eye, EyeOff, FolderTree, KeyRound, Loader2, Lock, Mail,
   ShieldCheck, TerminalSquare,
@@ -191,6 +192,7 @@ function LoginForm() {
       </aside>
 
       <section className="login-main">
+        <div className="login-theme-toggle"><ThemeToggle /></div>
         <div className="login-panel">
           <div className="login-panel-brand">
             <span className="login-brand-mark"><Database size={18} /></span>
